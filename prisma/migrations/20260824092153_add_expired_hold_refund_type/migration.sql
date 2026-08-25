@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "refund_type" ADD VALUE 'EXPIRED_HOLD_REFUND';
