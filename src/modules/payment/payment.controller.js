@@ -1,1063 +1,209 @@
-import { createDepositRefund, createUpfrontPayment, processDepositRefundSuccess, processUpfrontPaymentSuccess, createAdditionalPayment, createCancellationRefund, processCancellationRefundSuccess, processAdditionalPaymentSuccess, processPaymentFailed, processRefundFailed, createStoreCancellationRefund, getExpiredHoldReconciliations, createExpiredHoldRefund, processExpiredHoldRefundSuccess, getRefunds, retryFailedRefund } from "./payment.service.js";
+import {
+    createDepositPayment,
+    createDepositRefund,
+    createRentalPayment,
+    createRentalRefund,
+    getExpiredHoldReconciliations,
+    getRefunds,
+    processPaymentFailed,
+    processPaymentSucceeded,
+    processRefundFailed,
+    processRefundSucceeded,
+    retryFailedRefund,
+} from "./payment.service.js";
 
-const handlePaymentInputError = (error, res) => {
-    if (error.message === "GATEWAY_REQUEST_FAILED") {
-        return res.status(502).json({
-            success: false,
-            message:
-                "Không thể gửi yêu cầu tới cổng thanh toán",
-        });
-    }
+const errorStatus = new Map([
+    ["INVALID_UUID", 400],
+    ["TRANSACTION_REF_REQUIRED", 400],
+    ["ORDER_NOT_FOUND", 404],
+    ["PAYMENT_NOT_FOUND", 404],
+    ["REFUND_NOT_FOUND", 404],
+    ["ORDER_NOT_PAYABLE", 409],
+    ["ORDER_NOT_READY_FOR_DEPOSIT", 409],
+    ["ORDER_NOT_REFUNDABLE", 409],
+    ["HOLD_EXPIRED", 409],
+    ["PAYMENT_NOT_REQUIRED", 409],
+    ["DEPOSIT_ALREADY_COLLECTED", 409],
+    ["NO_REFUND_REQUIRED", 409],
+    ["PAYMENT_ALREADY_PROCESSED", 409],
+    ["REFUND_ALREADY_PROCESSED", 409],
+    ["REFUND_NOT_FAILED", 409],
+    ["TRANSACTION_REF_CONFLICT", 409],
+    ["TRANSACTION_CONFLICT", 409],
+    ["GATEWAY_REQUEST_FAILED", 502],
+]);
 
-    if (error.message === "INVALID_UUID") {
-        return res.status(400).json({
-            success: false,
-            message: "Mã định danh không hợp lệ",
-        });
-    }
+const errorMessages = new Map([
+    ["INVALID_UUID", "Mã định danh không hợp lệ"],
+    ["TRANSACTION_REF_REQUIRED", "Cần cung cấp mã giao dịch"],
+    ["ORDER_NOT_FOUND", "Không tìm thấy đơn thuê"],
+    ["PAYMENT_NOT_FOUND", "Không tìm thấy thanh toán"],
+    ["REFUND_NOT_FOUND", "Không tìm thấy yêu cầu hoàn tiền"],
+    ["ORDER_NOT_PAYABLE", "Đơn thuê không thể thanh toán"],
+    ["ORDER_NOT_READY_FOR_DEPOSIT", "Đơn chưa sẵn sàng thu tiền cọc"],
+    ["ORDER_NOT_REFUNDABLE", "Đơn thuê không thuộc luồng hoàn tiền này"],
+    ["HOLD_EXPIRED", "Thời gian giữ chỗ đã hết hạn"],
+    ["PAYMENT_NOT_REQUIRED", "Không có khoản cần thanh toán"],
+    ["DEPOSIT_ALREADY_COLLECTED", "Tiền cọc đã được thu đủ"],
+    ["NO_REFUND_REQUIRED", "Không có khoản cần hoàn"],
+    ["PAYMENT_ALREADY_PROCESSED", "Thanh toán đã được xử lý"],
+    ["REFUND_ALREADY_PROCESSED", "Hoàn tiền đã được xử lý"],
+    ["REFUND_NOT_FAILED", "Chỉ có thể thử lại hoàn tiền thất bại"],
+    ["TRANSACTION_REF_CONFLICT", "Mã giao dịch đã được sử dụng"],
+    ["TRANSACTION_CONFLICT", "Xung đột giao dịch, vui lòng thử lại"],
+    ["GATEWAY_REQUEST_FAILED", "Không thể kết nối cổng thanh toán"],
+]);
 
-    if (error.message === "TRANSACTION_REF_REQUIRED") {
-        return res.status(400).json({
-            success: false,
-            message: "Cần cung cấp mã tham chiếu giao dịch",
-        });
-    }
+const respondError = (error, res) => {
+    const status = errorStatus.get(error.message) ?? 500;
 
-    if (error.message === "INVALID_TRANSACTION_REF") {
-        return res.status(400).json({
-            success: false,
-            message: "Mã tham chiếu giao dịch không hợp lệ",
-        });
-    }
-
-    return null;
-};
-
-const createUpfrontPaymentController = async (req, res) => {
-    try {
-        const customerId = req.user.userId;
-        const { orderId } = req.body ?? {};
-
-        const payment = await createUpfrontPayment(orderId, customerId);
-
-        return res.status(201).json({
-            success: true,
-            data: payment,
-        });
-    } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "ORDER_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Không tìm thấy đơn thuê",
-            });
-        }
-
-        if (error.message === "ORDER_NOT_PAYABLE") {
-            return res.status(409).json({
-                success: false,
-                message: "Đơn thuê không thể thanh toán",
-            });
-        }
-
-        if (error.message === "HOLD_EXPIRED") {
-            return res.status(409).json({
-                success: false,
-                message: "Thời gian giữ chỗ đã hết hạn",
-            });
-        }
-
+    if (status === 500) {
         console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Không thể tạo thanh toán",
-        });
     }
+
+    return res.status(status).json({
+        success: false,
+        message:
+            errorMessages.get(error.message) ??
+            "Không thể xử lý yêu cầu thanh toán",
+    });
 };
 
-const mockPaymentSuccess = async (req, res) => {
+const createRentalPaymentController = async (req, res) => {
     try {
-        const {
-            paymentId,
-            transactionRef,
-        } = req.body ?? {};
-
-        const result = await processUpfrontPaymentSuccess(
-            paymentId,
-            transactionRef
+        const data = await createRentalPayment(
+            req.body?.orderId,
+            req.user.userId
         );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
+        return res.status(201).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "PAYMENT_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Không tìm thấy thanh toán",
-            });
-        }
-
-        if (error.message === "PAYMENT_NOT_UPFRONT") {
-            return res.status(400).json({
-                success: false,
-                message: "Mục đích thanh toán không hợp lệ",
-            });
-        }
-
-        if (error.message === "PAYMENT_ALREADY_PROCESSED") {
-            return res.status(409).json({
-                success: false,
-                message: "Thanh toán đã được xử lý trước đó",
-            });
-        }
-
-        if (error.message === "INVALID_PAYMENT_STATUS") {
-            return res.status(409).json({
-                success: false,
-                message: "Trạng thái thanh toán không hợp lệ",
-            });
-        }
-
-        if (error.message === "TRANSACTION_REF_CONFLICT") {
-            return res.status(409).json({
-                success: false,
-                message: "Mã tham chiếu giao dịch đã tồn tại",
-            });
-        }
-
-        if (error.message === "PAYMENT_CONFLICT") {
-            return res.status(409).json({
-                success: false,
-                message: "Xung đột khi xử lý thanh toán",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Không thể xử lý thanh toán",
-        });
+        return respondError(error, res);
     }
 };
 
-// Controller để tạo một bản ghi hoàn tiền đặt cọc mới
-const createDepositRefundController = async (
-    req,
-    res
-) => {
+const createDepositPaymentController = async (req, res) => {
     try {
-        const { orderId } = req.params;
-
-        const refund =
-            await createDepositRefund(orderId);
-
-        return res.status(201).json({
-            success: true,
-            data: refund,
-        });
+        const data = await createDepositPayment(
+            req.params.orderId
+        );
+        return res.status(201).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "ORDER_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Rental order not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "NO_REFUND_REQUIRED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "No deposit refund required",
-            });
-        }
-
-        if (
-            error.message ===
-            "UPFRONT_PAYMENT_NOT_FOUND"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Successful upfront payment not found",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to create deposit refund",
-        });
+        return respondError(error, res);
     }
 };
 
-const mockDepositRefundSuccess = async (
-    req,
-    res
-) => {
+const paymentSucceededController = async (req, res) => {
     try {
-        const {
-            refundId,
-            transactionRef,
-        } = req.body ?? {};
-
-        const result =
-            await processDepositRefundSuccess(
-                refundId,
-                transactionRef
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
+        const data = await processPaymentSucceeded(
+            req.body?.paymentId,
+            req.body?.transactionRef
+        );
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "REFUND_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Refund not found",
-            });
-        }
-
-        if (error.message === "INVALID_REFUND_TYPE") {
-            return res.status(409).json({
-                success: false,
-                message: "Invalid refund type",
-            });
-        }
-
-        if (
-            error.message ===
-            "REFUND_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Refund already processed",
-            });
-        }
-
-        if (error.message === "INVALID_REFUND_STATUS") {
-            return res.status(409).json({
-                success: false,
-                message: "Invalid refund status",
-            });
-        }
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_CONFLICT"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Transaction reference already used",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to process refund",
-        });
+        return respondError(error, res);
     }
 };
 
-// Controller để tạo một bản ghi thanh toán bổ sung mới
-const createAdditionalPaymentController = async (
-    req,
-    res
-) => {
+const paymentFailedController = async (req, res) => {
     try {
-        const { orderId } = req.params;
-        const customerId = req.user.userId;
-
-        const payment =
-            await createAdditionalPayment(
-                orderId,
-                customerId
-            );
-
-        return res.status(201).json({
-            success: true,
-            data: payment,
-        });
+        const data = await processPaymentFailed(
+            req.body?.paymentId,
+            req.body?.transactionRef
+        );
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "ORDER_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Rental order not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_ORDER_STATUS"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Order must be SETTLEMENT_PENDING",
-            });
-        }
-
-        if (
-            error.message ===
-            "NO_ADDITIONAL_PAYMENT_REQUIRED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "No additional payment required",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to create additional payment",
-        });
+        return respondError(error, res);
     }
 };
 
-// Controller để tạo một bản ghi hoàn tiền hủy đơn hàng mới
-const createCancellationRefundController = async (
-    req,
-    res
-) => {
+const createDepositRefundController = async (req, res) => {
     try {
-        const { cancellationRequestId } = req.params;
-
-        const result =
-            await createCancellationRefund(
-                cancellationRequestId
-            );
-
-        return res.status(201).json({
-            success: true,
-            data: result,
-        });
+        const data = await createDepositRefund(
+            req.params.orderId
+        );
+        return res.status(201).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (
-            error.message ===
-            "CANCELLATION_REQUEST_NOT_FOUND"
-        ) {
-            return res.status(404).json({
-                success: false,
-                message: "Cancellation request not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_NOT_APPROVED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Cancellation request has not been approved",
-            });
-        }
-
-        if (
-            error.message ===
-            "NO_CANCELLATION_REFUND_REQUIRED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "No cancellation refund required",
-            });
-        }
-
-        if (
-            error.message ===
-            "UPFRONT_PAYMENT_NOT_FOUND"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Successful upfront payment not found",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to create cancellation refund",
-        });
+        return respondError(error, res);
     }
 };
 
-// Controller để mô phỏng thành công hoàn tiền hủy đơn hàng
-const mockCancellationRefundSuccess = async (
-    req,
-    res
-) => {
+const createRentalRefundController = async (req, res) => {
     try {
-        const {
-            refundId,
-            transactionRef,
-        } = req.body ?? {};
-        if (!refundId || !transactionRef) {
-            return res.status(400).json({
-                success: false,
-                message: "Cần cung cấp refundId và transactionRef",
-            });
-        }
-        const result =
-            await processCancellationRefundSuccess(
-                refundId,
-                transactionRef
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
+        const data = await createRentalRefund(
+            req.params.orderId
+        );
+        return res.status(201).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "REFUND_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Refund not found",
-            });
-        }
-
-        if (error.message === "INVALID_REFUND_TYPE") {
-            return res.status(409).json({
-                success: false,
-                message: "Invalid refund type",
-            });
-        }
-
-        if (
-            error.message ===
-            "REFUND_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Refund already processed",
-            });
-        }
-
-        if (error.message === "INVALID_REFUND_STATUS") {
-            return res.status(409).json({
-                success: false,
-                message: "Invalid refund status",
-            });
-        }
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_CONFLICT"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Transaction reference already used",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to process cancellation refund",
-        });
+        return respondError(error, res);
     }
 };
 
-// Controller để mô phỏng thành công thanh toán bổ sung
-const mockAdditionalPaymentSuccess = async (
-    req,
-    res
-) => {
+const refundSucceededController = async (req, res) => {
     try {
-        const {
-            paymentId,
-            transactionRef,
-        } = req.body ?? {};
-
-        const result =
-            await processAdditionalPaymentSuccess(
-                paymentId,
-                transactionRef
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
+        const data = await processRefundSucceeded(
+            req.body?.refundId,
+            req.body?.transactionRef
+        );
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "PAYMENT_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Payment not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_PAYMENT_PURPOSE"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Payment must be ADDITIONAL",
-            });
-        }
-
-        if (
-            error.message ===
-            "PAYMENT_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Payment already processed",
-            });
-        }
-
-        if (error.message === "INVALID_PAYMENT_STATUS") {
-            return res.status(409).json({
-                success: false,
-                message: "Invalid payment status",
-            });
-        }
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_CONFLICT"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Transaction reference already used",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_ORDER_STATUS"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Đơn thuê không ở trạng thái chờ quyết toán",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_PAYMENT_AMOUNT"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Số tiền thanh toán bổ sung không hợp lệ",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to process additional payment",
-        });
+        return respondError(error, res);
     }
 };
 
-// Controller để mô phỏng thất bại thanh toán
-const mockPaymentFailed = async (req, res) => {
+const refundFailedController = async (req, res) => {
     try {
-        const {
-            paymentId,
-            transactionRef,
-        } = req.body ?? {};
-
-        const result =
-            await processPaymentFailed(
-                paymentId,
-                transactionRef
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
+        const data = await processRefundFailed(
+            req.body?.refundId,
+            req.body?.transactionRef
+        );
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_REQUIRED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Transaction reference is required",
-            });
-        }
-
-        if (error.message === "PAYMENT_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Payment not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "PAYMENT_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Payment already processed",
-            });
-        }
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_CONFLICT"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Transaction reference already used",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_PAYMENT_STATUS"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Invalid payment status",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to process failed payment",
-        });
+        return respondError(error, res);
     }
 };
 
-const mockRefundFailed = async (req, res) => {
+const retryFailedRefundController = async (req, res) => {
     try {
-        const {
-            refundId,
-            transactionRef,
-        } = req.body ?? {};
-
-        const result =
-            await processRefundFailed(
-                refundId,
-                transactionRef
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
+        const data = await retryFailedRefund(
+            req.params.refundId
+        );
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_REQUIRED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Transaction reference is required",
-            });
-        }
-
-        if (error.message === "REFUND_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Refund not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "REFUND_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Refund already processed",
-            });
-        }
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_CONFLICT"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Transaction reference already used",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_REFUND_STATUS"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Invalid refund status",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to process failed refund",
-        });
+        return respondError(error, res);
     }
 };
 
-const createStoreCancellationRefundController = async (
-    req,
-    res
-) => {
+const getRefundsController = async (_req, res) => {
     try {
-        const { orderId } = req.params;
-
-        const result =
-            await createStoreCancellationRefund(
-                orderId
-            );
-
-        return res.status(201).json({
-            success: true,
-            data: result,
-        });
+        const data = await getRefunds();
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "ORDER_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Rental order not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "ORDER_NOT_CANCELLED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Order must be CANCELLED",
-            });
-        }
-
-        if (
-            error.message ===
-            "NO_CANCELLATION_REFUND_REQUIRED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "No cancellation refund required",
-            });
-        }
-
-        if (
-            error.message ===
-            "UPFRONT_PAYMENT_NOT_FOUND"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Successful upfront payment not found",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to create store cancellation refund",
-        });
+        return respondError(error, res);
     }
 };
 
 const getExpiredHoldReconciliationsController = async (
-    req,
+    _req,
     res
 ) => {
     try {
-        const data =
-            await getExpiredHoldReconciliations();
-
-        return res.status(200).json({
-            success: true,
-            data,
-        });
+        const data = await getExpiredHoldReconciliations();
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Không thể lấy danh sách giao dịch cần đối soát",
-        });
+        return respondError(error, res);
     }
 };
 
-const createExpiredHoldRefundController = async (
-    req,
-    res
-) => {
-    try {
-        const { paymentId } = req.params;
-
-        const result =
-            await createExpiredHoldRefund(paymentId);
-
-        return res.status(201).json({
-            success: true,
-            data: result,
-        });
-    } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "PAYMENT_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Không tìm thấy giao dịch thanh toán",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_RECONCILIATION_PAYMENT"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Giao dịch thanh toán không hợp lệ để đối soát",
-            });
-        }
-
-        if (error.message === "ORDER_NOT_EXPIRED") {
-            return res.status(409).json({
-                success: false,
-                message: "Đơn thuê chưa hết hạn",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Không thể tạo hoàn tiền đối soát",
-        });
-    }
+export {
+    createDepositPaymentController,
+    createDepositRefundController,
+    createRentalPaymentController,
+    createRentalRefundController,
+    getExpiredHoldReconciliationsController,
+    getRefundsController,
+    paymentFailedController,
+    paymentSucceededController,
+    refundFailedController,
+    refundSucceededController,
+    retryFailedRefundController,
 };
-
-const mockExpiredHoldRefundSuccessController = async (
-    req,
-    res
-) => {
-    try {
-        const { refundId, transactionRef } = req.body ?? {};
-
-        const result =
-            await processExpiredHoldRefundSuccess(
-                refundId,
-                transactionRef
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
-    } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (
-            error.message === "TRANSACTION_REF_REQUIRED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Cần cung cấp mã tham chiếu giao dịch",
-            });
-        }
-
-        if (error.message === "REFUND_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Không tìm thấy giao dịch hoàn tiền",
-            });
-        }
-
-        if (error.message === "INVALID_REFUND_TYPE") {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Loại giao dịch hoàn tiền không hợp lệ",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_EXPIRED_HOLD_REFUND"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Giao dịch không hợp lệ để hoàn tiền do hết hạn giữ chỗ",
-            });
-        }
-
-        if (
-            error.message === "REFUND_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Giao dịch hoàn tiền đã được xử lý",
-            });
-        }
-
-        if (
-            error.message ===
-            "TRANSACTION_REF_ALREADY_USED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Mã tham chiếu giao dịch đã được sử dụng",
-            });
-        }
-
-        if (error.message === "INVALID_REFUND_STATUS") {
-            return res.status(409).json({
-                success: false,
-                message: "Trạng thái hoàn tiền không hợp lệ",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Không thể hoàn tất giao dịch hoàn tiền đối soát",
-        });
-    }
-};
-
-const getRefundsController = async (req, res) => {
-    try {
-        const data = await getRefunds();
-
-        return res.status(200).json({
-            success: true,
-            data,
-        });
-    } catch (error) {
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Không thể lấy danh sách giao dịch hoàn tiền",
-        });
-    }
-};
-
-const retryFailedRefundController = async (
-    req,
-    res
-) => {
-    try {
-        const { refundId } = req.params;
-        const result = await retryFailedRefund(refundId);
-
-        return res.status(201).json({
-            success: true,
-            data: result,
-        });
-    } catch (error) {
-        const inputError = handlePaymentInputError(error, res);
-        if (inputError) return inputError;
-
-        if (error.message === "REFUND_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Không tìm thấy giao dịch hoàn tiền",
-            });
-        }
-
-        if (error.message === "REFUND_NOT_FAILED") {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Chỉ giao dịch hoàn tiền thất bại mới được thử lại",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Không thể tạo lại giao dịch hoàn tiền",
-        });
-    }
-};
-
-export { createUpfrontPaymentController, mockPaymentSuccess, createDepositRefundController, mockDepositRefundSuccess, createAdditionalPaymentController, createCancellationRefundController, mockCancellationRefundSuccess, mockAdditionalPaymentSuccess, mockPaymentFailed, mockRefundFailed, createStoreCancellationRefundController, getExpiredHoldReconciliationsController, createExpiredHoldRefundController, mockExpiredHoldRefundSuccessController, getRefundsController, retryFailedRefundController };

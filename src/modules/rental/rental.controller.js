@@ -1,5 +1,23 @@
-import { cancelPendingPaymentOrder } from "./rental.repository.js";
-import { createRental, getRentalOrders, getRentalOrderDetail, getRentalOrderHistory, startPreparingRentalOrder, prepareReservation, handoverRentalOrder, receiveRentalReturn, inspectRentalOrderItem, settleRentalOrder, changeRentalUnitStatus, decideFeeApproval, markOverdueRentalOrders, requestCancellation, rejectCancellationRequest, approveCancellationRequest, getPendingCancellationRequests, expirePendingPaymentOrders, replaceRentalUnit, cancelOrderByStore } from "./rental.service.js"
+import {
+    changeRentalUnitStatus,
+    confirmAdditionalPayment,
+    createRental,
+    decideFeeApproval,
+    expirePendingPaymentOrders,
+    getRentalOrderDetail,
+    getRentalOrderHistory,
+    getRentalOrders,
+    handoverRentalOrder,
+    inspectRentalOrderItem,
+    markOverdueRentalOrders,
+    markRentalOrderFulfillmentFailed,
+    markRentalOrderNoShow,
+    prepareReservation,
+    receiveRentalReturn,
+    replaceRentalUnit,
+    settleRentalOrder,
+    startPreparingRentalOrder,
+} from "./rental.service.js";
 
 const handleGatewayRequestError = (error, res) => {
     if (error.message !== "GATEWAY_REQUEST_FAILED") {
@@ -218,13 +236,6 @@ const startPreparingOrder = async (req, res) => {
             });
         }
 
-        if (error.message === "CANCELLATION_PENDING") {
-            return res.status(409).json({
-                success: false,
-                message: "Đơn thuê có yêu cầu hủy đang chờ xử lý",
-            });
-        }
-
         console.error(error);
 
         return res.status(500).json({
@@ -299,13 +310,6 @@ const prepareRentalReservation = async (req, res) => {
             });
         }
 
-        if (error.message === "CANCELLATION_PENDING") {
-            return res.status(409).json({
-                success: false,
-                message: "Đơn thuê có yêu cầu hủy đang chờ xử lý",
-            });
-        }
-
         if (
             error.message ===
             "INVALID_RENTAL_UNIT_STATUS"
@@ -330,13 +334,20 @@ const handoverOrder = async (req, res) => {
     try {
         const { id } = req.params;
         const staffId = req.user.userId;
-        const { nationalId, items } = req.body ?? {};
+        const {
+            nationalId,
+            items,
+            depositCollectionMethod,
+            collectedDepositAmount,
+        } = req.body ?? {};
 
         const order = await handoverRentalOrder(
             id,
             staffId,
             nationalId,
-            items
+            items,
+            depositCollectionMethod,
+            collectedDepositAmount
         );
 
         return res.status(200).json({
@@ -355,13 +366,6 @@ const handoverOrder = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 message: "Đơn thuê phải ở trạng thái sẵn sàng để nhận",
-            });
-        }
-
-        if (error.message === "CANCELLATION_PENDING") {
-            return res.status(409).json({
-                success: false,
-                message: "Đơn thuê có yêu cầu hủy đang chờ xử lý",
             });
         }
 
@@ -423,6 +427,27 @@ const handoverOrder = async (req, res) => {
 
         if (
             error.message ===
+                "INVALID_DEPOSIT_COLLECTION_METHOD" ||
+            error.message === "DEPOSIT_AMOUNT_MISMATCH"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Thông tin thu tiền cọc không hợp lệ",
+            });
+        }
+
+        if (
+            error.message === "DEPOSIT_NOT_COLLECTED" ||
+            error.message === "DEPOSIT_ALREADY_COLLECTED"
+        ) {
+            return res.status(409).json({
+                success: false,
+                message: "Tiền cọc chưa được thu đủ hoặc đã được ghi nhận",
+            });
+        }
+
+        if (
+            error.message ===
             "INVALID_RENTAL_UNIT_STATUS"
         ) {
             return res.status(409).json({
@@ -477,6 +502,17 @@ const receiveReturn = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 message: "Không tìm thấy đặt chỗ hoạt động",
+            });
+        }
+
+        if (
+            error.message ===
+            "RETURN_TIME_OUTSIDE_BUSINESS_HOURS"
+        ) {
+            return res.status(422).json({
+                success: false,
+                message:
+                    "Cửa hàng chỉ tiếp nhận trả đồ từ 08:00 đến 18:00",
             });
         }
 
@@ -651,7 +687,7 @@ const settleOrder = async (req, res) => {
 
         if (
             error.message ===
-            "UPFRONT_PAYMENT_NOT_FOUND"
+            "RENTAL_PAYMENT_NOT_FOUND"
         ) {
             return res.status(409).json({
                 success: false,
@@ -677,6 +713,17 @@ const settleOrder = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 message: "Đơn thuê chưa có thời gian trả thực tế",
+            });
+        }
+
+        if (
+            error.message ===
+            "RETURN_TIME_OUTSIDE_BUSINESS_HOURS"
+        ) {
+            return res.status(422).json({
+                success: false,
+                message:
+                    "Thời gian trả thực tế phải trong khoảng 08:00 đến 18:00",
             });
         }
 
@@ -853,7 +900,7 @@ const decideFeeApprovalController = async (
 
         if (
             error.message ===
-            "UPFRONT_PAYMENT_NOT_FOUND"
+            "RENTAL_PAYMENT_NOT_FOUND"
         ) {
             return res.status(409).json({
                 success: false,
@@ -903,360 +950,6 @@ const markOverdueOrdersController = async (
     }
 };
 
-// Controller to cancel a pending payment rental order
-const cancelPendingPaymentOrderController = async (
-    req,
-    res
-) => {
-    try {
-        const { id } = req.params;
-        const customerId = req.user.userId;
-        const { reason } = req.body ?? {};
-        let normalizedReason = null;
-
-        if (reason !== null && reason !== undefined) {
-            if (typeof reason !== "string") {
-                throw new Error(
-                    "INVALID_CANCELLATION_REASON"
-                );
-            }
-
-            normalizedReason = reason.trim() || null;
-        }
-
-        const order =
-            await cancelPendingPaymentOrder(
-                id,
-                customerId,
-                normalizedReason
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: order,
-        });
-    } catch (error) {
-        const gatewayError =
-            handleGatewayRequestError(error, res);
-        if (gatewayError) return gatewayError;
-
-        if (
-            error.message ===
-            "INVALID_CANCELLATION_REASON"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Lý do hủy không hợp lệ",
-            });
-        }
-
-        if (error.message === "ORDER_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Rental order not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "DIRECT_CANCELLATION_NOT_ALLOWED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Only PENDING_PAYMENT orders can be cancelled directly",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to cancel rental order",
-        });
-    }
-};
-
-const requestCancellationController = async (
-    req,
-    res
-) => {
-    try {
-        const { id } = req.params;
-        const customerId = req.user.userId;
-        const { reason } = req.body ?? {};
-
-        const request = await requestCancellation(
-            id,
-            customerId,
-            reason
-        );
-
-        return res.status(201).json({
-            success: true,
-            data: request,
-        });
-    } catch (error) {
-        if (error.message === "ORDER_NOT_FOUND") {
-            return res.status(404).json({
-                success: false,
-                message: "Rental order not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_REQUEST_NOT_ALLOWED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Cancellation request is not allowed for this order status",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_REASON_REQUIRED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Cancellation reason is required",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_ALREADY_REQUESTED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Cancellation has already been requested",
-            });
-        }
-
-        if (error.message === "POLICY_NOT_FOUND") {
-            return res.status(409).json({
-                success: false,
-                message: "Active rental policy not found",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to request cancellation",
-        });
-    }
-};
-
-const rejectCancellationRequestController = async (
-    req,
-    res
-) => {
-    try {
-        const { cancellationRequestId } = req.params;
-        const managerId = req.user.userId;
-        const { decisionReason } = req.body ?? {};
-
-        const request =
-            await rejectCancellationRequest(
-                cancellationRequestId,
-                managerId,
-                decisionReason
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: request,
-        });
-    } catch (error) {
-        if (
-            error.message ===
-            "CANCELLATION_REQUEST_NOT_FOUND"
-        ) {
-            return res.status(404).json({
-                success: false,
-                message: "Cancellation request not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_REQUEST_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Cancellation request already processed",
-            });
-        }
-
-        if (
-            error.message ===
-            "DECISION_REASON_REQUIRED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message: "Decision reason is required",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to reject cancellation request",
-        });
-    }
-};
-
-const approveCancellationRequestController = async (
-    req,
-    res
-) => {
-    try {
-        const { cancellationRequestId } = req.params;
-        const managerId = req.user.userId;
-
-        const {
-            decisionReason,
-        } = req.body ?? {};
-
-        const result =
-            await approveCancellationRequest(
-                cancellationRequestId,
-                managerId,
-                decisionReason
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
-    } catch (error) {
-        const gatewayError =
-            handleGatewayRequestError(error, res);
-        if (gatewayError) return gatewayError;
-
-        if (error.message === "INVALID_DECISION_REASON") {
-            return res.status(400).json({
-                success: false,
-                message: "Lý do quyết định không hợp lệ",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_REQUEST_NOT_FOUND"
-        ) {
-            return res.status(404).json({
-                success: false,
-                message: "Cancellation request not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_REQUEST_ALREADY_PROCESSED"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Cancellation request already processed",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_ORDER_STATUS"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Order cannot be cancelled in its current status",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_POLICY_NOT_FOUND"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message: "Cancellation policy not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "INVALID_CANCELLATION_POLICY"
-        ) {
-            return res.status(500).json({
-                success: false,
-                message:
-                    "Invalid cancellation policy configuration",
-            });
-        }
-
-        if (
-            error.message ===
-            "UPFRONT_PAYMENT_NOT_FOUND"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Successful upfront payment not found",
-            });
-        }
-
-        if (
-            error.message ===
-            "CANCELLATION_RULE_NOT_FOUND"
-        ) {
-            return res.status(500).json({
-                success: false,
-                message: "Cancellation rule not found",
-            });
-        }
-
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Failed to approve cancellation request",
-        });
-    }
-};
-
-const getPendingCancellationRequestsController = async (
-    req,
-    res
-) => {
-    try {
-        const data =
-            await getPendingCancellationRequests();
-
-        return res.status(200).json({
-            success: true,
-            data,
-        });
-    } catch (error) {
-        console.error(error);
-
-        return res.status(500).json({
-            success: false,
-            message:
-                "Không thể lấy danh sách yêu cầu hủy đang chờ xử lý",
-        });
-    }
-};
-
-// Controller to expire pending payment orders
 const expirePendingPaymentOrdersController = async (
     req,
     res
@@ -1340,17 +1033,6 @@ const replaceRentalUnitController = async (
 
         if (
             error.message ===
-            "CANCELLATION_PENDING"
-        ) {
-            return res.status(409).json({
-                success: false,
-                message:
-                    "Order has a pending cancellation request",
-            });
-        }
-
-        if (
-            error.message ===
             "INVALID_RESERVATION_STATUS"
         ) {
             return res.status(409).json({
@@ -1380,66 +1062,176 @@ const replaceRentalUnitController = async (
         });
     }
 };
-const cancelOrderByStoreController = async (
-    req,
-    res
-) => {
+
+const markNoShowController = async (req, res) => {
     try {
-        const { id } = req.params;
-        const managerId = req.user.userId;
-        const { reason } = req.body ?? {};
-
-        const result =
-            await cancelOrderByStore(
-                id,
-                managerId,
-                reason
-            );
-
-        return res.status(200).json({
-            success: true,
-            data: result,
-        });
+        const data = await markRentalOrderNoShow(
+            req.params.id,
+            req.user.userId
+        );
+        return res.status(200).json({ success: true, data });
     } catch (error) {
-        if (
-            error.message ===
-            "ORDER_NOT_FOUND"
-        ) {
+        if (error.message === "ORDER_NOT_FOUND") {
             return res.status(404).json({
                 success: false,
-                message: "Rental order not found",
+                message: "Không tìm thấy đơn thuê",
             });
         }
 
         if (
             error.message ===
-            "CANCELLATION_REASON_REQUIRED"
-        ) {
-            return res.status(400).json({
-                success: false,
-                message:
-                    "Cancellation reason is required",
-            });
-        }
-
-        if (
-            error.message ===
-            "STORE_CANCELLATION_NOT_ALLOWED"
+            "REPLACEMENT_UNIT_NOT_UNAVAILABLE"
         ) {
             return res.status(409).json({
                 success: false,
                 message:
-                    "Order cannot be cancelled by store in current status",
+                    "RentalUnit cũ phải được đánh dấu hư hỏng hoặc bảo trì trước khi thay thế",
             });
         }
-
+        if (error.message === "INVALID_ORDER_STATUS") {
+            return res.status(409).json({
+                success: false,
+                message: "Chỉ đơn sẵn sàng nhận mới có thể đánh dấu không đến nhận",
+            });
+        }
+        if (error.message === "DEPOSIT_ALREADY_COLLECTED") {
+            return res.status(409).json({
+                success: false,
+                message: "Không thể đánh dấu không đến nhận sau khi đã thu tiền cọc",
+            });
+        }
         console.error(error);
-
         return res.status(500).json({
             success: false,
-            message:
-                "Failed to cancel rental order by store",
+            message: "Không thể cập nhật đơn không đến nhận",
         });
     }
 };
-export { createRentalOrder, getRentalOrdersController, getRentalOrderDetailController, getRentalOrderHistoryController, startPreparingOrder, prepareRentalReservation, handoverOrder, receiveReturn, inspectOrderItem, settleOrder, updateRentalUnitStatusController, decideFeeApprovalController, markOverdueOrdersController, cancelPendingPaymentOrderController, requestCancellationController, rejectCancellationRequestController, approveCancellationRequestController, getPendingCancellationRequestsController, expirePendingPaymentOrdersController, replaceRentalUnitController, cancelOrderByStoreController };
+
+const markFulfillmentFailedController = async (req, res) => {
+    try {
+        const data = await markRentalOrderFulfillmentFailed(
+            req.params.id,
+            req.params.reservationId,
+            req.user.userId,
+            req.body?.reason
+        );
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        const gatewayError = handleGatewayRequestError(
+            error,
+            res
+        );
+        if (gatewayError) return gatewayError;
+
+        if (error.message === "ORDER_NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy đơn thuê",
+            });
+        }
+        if (error.message === "RESERVATION_NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy Reservation hiện hành",
+            });
+        }
+        if (
+            error.message ===
+            "FULFILLMENT_FAILURE_REASON_REQUIRED"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Cần cung cấp lý do cửa hàng không thể đáp ứng đơn",
+            });
+        }
+        if (
+            error.message === "INVALID_ORDER_STATUS" ||
+            error.message === "REPLACEMENT_UNIT_AVAILABLE" ||
+            error.message ===
+                "REPLACEMENT_UNIT_NOT_UNAVAILABLE"
+        ) {
+            return res.status(409).json({
+                success: false,
+                message:
+                    error.message === "REPLACEMENT_UNIT_AVAILABLE"
+                        ? "Vẫn còn RentalUnit phù hợp để thay thế"
+                        : error.message ===
+                          "REPLACEMENT_UNIT_NOT_UNAVAILABLE"
+                        ? "RentalUnit lỗi phải được đánh dấu hư hỏng hoặc bảo trì"
+                        : "Trạng thái đơn không cho phép xử lý thất bại cung ứng",
+            });
+        }
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: "Không thể xử lý thất bại cung ứng",
+        });
+    }
+};
+
+const confirmAdditionalPaymentController = async (req, res) => {
+    try {
+        const data = await confirmAdditionalPayment(
+            req.params.id,
+            req.user.userId,
+            req.body?.amount
+        );
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        if (error.message === "ORDER_NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy đơn thuê",
+            });
+        }
+        if (
+            [
+                "INVALID_ADDITIONAL_PAYMENT",
+                "ADDITIONAL_PAYMENT_MISMATCH",
+            ].includes(error.message)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Số tiền thanh toán bổ sung không hợp lệ",
+            });
+        }
+        if (
+            [
+                "INVALID_ORDER_STATUS",
+                "NO_ADDITIONAL_PAYMENT_REQUIRED",
+            ].includes(error.message)
+        ) {
+            return res.status(409).json({
+                success: false,
+                message: "Đơn không chờ thanh toán bổ sung",
+            });
+        }
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: "Không thể xác nhận thanh toán bổ sung",
+        });
+    }
+};
+
+export {
+    confirmAdditionalPaymentController,
+    createRentalOrder,
+    decideFeeApprovalController,
+    expirePendingPaymentOrdersController,
+    getRentalOrderDetailController,
+    getRentalOrderHistoryController,
+    getRentalOrdersController,
+    handoverOrder,
+    inspectOrderItem,
+    markFulfillmentFailedController,
+    markNoShowController,
+    markOverdueOrdersController,
+    prepareRentalReservation,
+    receiveReturn,
+    replaceRentalUnitController,
+    settleOrder,
+    startPreparingOrder,
+    updateRentalUnitStatusController,
+};

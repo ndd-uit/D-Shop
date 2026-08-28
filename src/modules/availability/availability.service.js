@@ -12,28 +12,24 @@ import {
     findRentalUnitById,
 } from "./availability.repository.js";
 import { validateUuidValue } from "../../utils/validation.js";
+import {
+    getReservationBlockPeriod,
+    normalizeRentalPeriod,
+} from "../../utils/rentalPeriod.js";
 
 const UUID_REGEX =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 
-const subtractMinutes = (date, minutes) => {
-    return new Date(date.getTime() - minutes * 60000);
-};
-
-
-const addMinutes = (date, minutes) => {
-    return new Date(date.getTime() + minutes * 60000);
-}
-
 // Kiểm tra tính khả dụng của sản phẩm cho thuê
 const checkAvailability = async ({ garmentId, requestedSize, quantity, rentalStartAt, returnDueAt, db }) => {
-    const start = new Date(rentalStartAt);
-    const end = new Date(returnDueAt);
-    // Kiểm tra tính hợp lệ của ngày
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
-        throw new Error("INVALID_RENTAL_PERIOD");
-    }
+    const {
+        rentalStartAt: start,
+        returnDueAt: end,
+    } = normalizeRentalPeriod(
+        rentalStartAt,
+        returnDueAt
+    );
     if (!Number.isInteger(quantity) || quantity < 1) {
         throw new Error("INVALID_QUANTITY");
     }
@@ -43,8 +39,10 @@ const checkAvailability = async ({ garmentId, requestedSize, quantity, rentalSta
     if (!policy) {
         throw new Error("RENTAL_POLICY_NOT_FOUND");
     }
-    const blockStartAt = subtractMinutes(start, policy.preparationBuffer); // Thời gian bắt đầu bị chặn là thời gian bắt đầu thuê trừ đi thời gian chuẩn bị
-    const blockEndAt = addMinutes(end, policy.cleaningBuffer); // Thời gian kết thúc bị chặn là thời gian kết thúc thuê cộng thêm thời gian vệ sinh
+    const {
+        blockedStartAt: blockStartAt,
+        blockedEndAt: blockEndAt,
+    } = getReservationBlockPeriod(start, end);
     const availableUnits = await findAvailableRentalUnits(garmentId, requestedSize, blockStartAt, blockEndAt, db); // Tìm các đơn vị cho thuê khả dụng trong khoảng thời gian bị chặn
     return {
         available: availableUnits.length >= quantity, // Nếu số lượng đơn vị khả dụng lớn hơn hoặc bằng số lượng yêu cầu, trả về true

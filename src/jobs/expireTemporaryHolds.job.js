@@ -1,4 +1,7 @@
-import { expirePendingPaymentOrders } from "../modules/rental/rental.service.js";
+import {
+    completeReturnedReservationBlocks,
+    expirePendingPaymentOrders,
+} from "../modules/rental/rental.service.js";
 
 const EXPIRE_TEMPORARY_HOLDS_INTERVAL_MS = 60_000;
 
@@ -17,7 +20,14 @@ const runExpireTemporaryHoldsTick = async (
     isRunning = true;
 
     try {
-        return await expire();
+        const expiredHolds = await expire();
+        const completedReservationBlocks =
+            await completeReturnedReservationBlocks();
+
+        return {
+            ...expiredHolds,
+            ...completedReservationBlocks,
+        };
     } catch (error) {
         console.error(
             "Không thể tự động xử lý giữ chỗ đã hết hạn",

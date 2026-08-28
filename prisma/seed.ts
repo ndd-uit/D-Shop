@@ -6,6 +6,9 @@ import {
   UserRole,
 } from "../src/generated/prisma/client.ts";
 import { PrismaPg } from "@prisma/adapter-pg";
+import {
+  activateRentalPolicyV2,
+} from "./rental-policy-v2.js";
 
 // Khai báo biến môi trường DATABASE_URL
 const connectionString = process.env.DATABASE_URL;
@@ -69,42 +72,6 @@ const TEST_RENTAL_UNITS = [
     size: "L",
   },
 ];
-
-const TEST_RENTAL_POLICY = {
-  version: "v1.1",
-  effectiveFrom: new Date("2026-08-24T00:00:00+07:00"),
-  preparationBuffer: 60,
-  cleaningBuffer: 120,
-  holdDuration: 15,
-  approvalThreshold: 500000,
-  cancellationPolicy: {
-    basis: "RENTAL_AMOUNT",
-    gracePeriodHours: 2,
-    rounding: "HALF_UP_TO_VND",
-    rules: [
-      {
-        minHoursBeforeRental: 168,
-        feeRateBps: 0,
-      },
-      {
-        minHoursBeforeRental: 72,
-        feeRateBps: 3000,
-      },
-      {
-        minHoursBeforeRental: 0,
-        feeRateBps: 10000,
-      },
-    ],
-  },
-  lateFeePolicy: {
-    basis: "RENTAL_AMOUNT",
-    gracePeriodHours: 1,
-    unitHours: 24,
-    feeRateBpsPerUnit: 1000,
-    maxFeeRateBps: 10000,
-    rounding: "HALF_UP_TO_VND",
-  },
-};
 
 // Hàm seed dữ liệu mẫu vào cơ sở dữ liệu
 async function seedCustomer() {
@@ -273,30 +240,13 @@ async function seedRentalUnits(garmentId: string) {
   );
 }
 
-async function seedRentalPolicy() {
-  const existingPolicy = await prisma.rentalPolicy.findUnique({
-    where: {
-      version: TEST_RENTAL_POLICY.version,
-    },
-  });
+async function seedRentalPolicy(createdBy: string) {
+  const result = await activateRentalPolicyV2(
+    prisma,
+    createdBy,
+  );
 
-  if (existingPolicy) {
-    return existingPolicy;
-  }
-
-  return prisma.rentalPolicy.create({
-    data: {
-      version: TEST_RENTAL_POLICY.version,
-      effectiveFrom: TEST_RENTAL_POLICY.effectiveFrom,
-      effectiveTo: null,
-      preparationBuffer: TEST_RENTAL_POLICY.preparationBuffer,
-      cleaningBuffer: TEST_RENTAL_POLICY.cleaningBuffer,
-      holdDuration: TEST_RENTAL_POLICY.holdDuration,
-      approvalThreshold: TEST_RENTAL_POLICY.approvalThreshold,
-      cancellationPolicy: TEST_RENTAL_POLICY.cancellationPolicy,
-      lateFeePolicy: TEST_RENTAL_POLICY.lateFeePolicy,
-    },
-  });
+  return result.policy;
 }
 
 async function main() {
@@ -306,7 +256,7 @@ async function main() {
   const category = await seedCategory();
   const garment = await seedGarment(category.categoryId);
   const rentalUnits = await seedRentalUnits(garment.garmentId);
-  const policy = await seedRentalPolicy();
+  const policy = await seedRentalPolicy(manager.userId);
 
   console.log("Seed completed");
   console.log({

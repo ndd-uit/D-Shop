@@ -1,88 +1,59 @@
 import { Router } from "express";
-import { createRentalOrder, getRentalOrdersController, getRentalOrderDetailController, getRentalOrderHistoryController, startPreparingOrder, prepareRentalReservation, handoverOrder, receiveReturn, inspectOrderItem, settleOrder, updateRentalUnitStatusController, decideFeeApprovalController, markOverdueOrdersController, cancelPendingPaymentOrderController, requestCancellationController, rejectCancellationRequestController, approveCancellationRequestController, getPendingCancellationRequestsController, expirePendingPaymentOrdersController, replaceRentalUnitController, cancelOrderByStoreController } from "./rental.controller.js"
 import authenticate from "../../middlewares/auth.middleware.js";
 import authorizeRole from "../../middlewares/authorizeRole.js";
 import validateUuid from "../../middlewares/validateUuid.js";
+import {
+    confirmAdditionalPaymentController,
+    createRentalOrder,
+    decideFeeApprovalController,
+    expirePendingPaymentOrdersController,
+    getRentalOrderDetailController,
+    getRentalOrderHistoryController,
+    getRentalOrdersController,
+    handoverOrder,
+    inspectOrderItem,
+    markFulfillmentFailedController,
+    markNoShowController,
+    markOverdueOrdersController,
+    prepareRentalReservation,
+    receiveReturn,
+    replaceRentalUnitController,
+    settleOrder,
+    startPreparingOrder,
+    updateRentalUnitStatusController,
+} from "./rental.controller.js";
 
 const router = Router();
+const staffOnly = authorizeRole("RENTAL_STAFF");
+const operationsRoles = authorizeRole(
+    "RENTAL_STAFF",
+    "STORE_MANAGER"
+);
 
-// POST /rentals/
+router.post("/", authenticate, authorizeRole("CUSTOMER"), createRentalOrder);
+
 router.post(
-    "/",
+    "/overdue/check",
     authenticate,
-    authorizeRole("CUSTOMER"),
-    createRentalOrder
+    operationsRoles,
+    markOverdueOrdersController
 );
 
-// PATCH /rentals/:id/preparing
-router.patch(
-    "/:id/preparing",
-    authenticate,
-    authorizeRole("RENTAL_STAFF"),
-    validateUuid("id"),
-    startPreparingOrder
-);
-
-// PATCH /rentals/:orderId/reservations/:reservationId/prepare
-router.patch(
-    "/:orderId/reservations/:reservationId/prepare",
-    authenticate,
-    authorizeRole("RENTAL_STAFF"),
-    validateUuid("orderId"),
-    validateUuid("reservationId"),
-    prepareRentalReservation
-);
-
-// PATCH /rentals/:id/handover
-router.patch(
-    "/:id/handover",
-    authenticate,
-    authorizeRole("RENTAL_STAFF"),
-    validateUuid("id"),
-    handoverOrder
-);
-
-// PATCH /rentals/:id/return
-router.patch(
-    "/:id/return",
-    authenticate,
-    authorizeRole("RENTAL_STAFF"),
-    validateUuid("id"),
-    receiveReturn
-);
-
-// POST /rentals/:id/items/:itemId/inspection
 router.post(
-    "/:id/items/:itemId/inspection",
+    "/expired/check",
     authenticate,
-    authorizeRole("RENTAL_STAFF"),
-    validateUuid("id"),
-    validateUuid("itemId"),
-    inspectOrderItem
+    operationsRoles,
+    expirePendingPaymentOrdersController
 );
 
-// POST /rentals/:id/settlement
-router.post(
-    "/:id/settlement",
-    authenticate,
-    authorizeRole("RENTAL_STAFF"),
-    validateUuid("id"),
-    settleOrder
-);
-
-// PATCH /rentals/units/:rentalUnitId/status
 router.patch(
     "/units/:rentalUnitId/status",
     authenticate,
-    authorizeRole(
-        "RENTAL_STAFF",
-        "STORE_MANAGER"
-    ),
+    operationsRoles,
     validateUuid("rentalUnitId"),
     updateRentalUnitStatusController
 );
 
-// PATCH /rentals/fee-approvals/:feeApprovalRequestId/decision
 router.patch(
     "/fee-approvals/:feeApprovalRequestId/decision",
     authenticate,
@@ -91,109 +62,101 @@ router.patch(
     decideFeeApprovalController
 );
 
-// POST /rentals/overdue/check
-router.post(
-    "/overdue/check",
-    authenticate,
-    authorizeRole(
-        "RENTAL_STAFF",
-        "STORE_MANAGER"
-    ),
-    markOverdueOrdersController
-);
-
-// PATCH /rentals/:id/cancel
 router.patch(
-    "/:id/cancel",
+    "/:id/preparing",
     authenticate,
-    authorizeRole("CUSTOMER"),
+    staffOnly,
     validateUuid("id"),
-    cancelPendingPaymentOrderController
-);
-
-// POST /rentals/:id/cancellation-request
-router.post(
-    "/:id/cancellation-request",
-    authenticate,
-    authorizeRole("CUSTOMER"),
-    validateUuid("id"),
-    requestCancellationController
-);
-
-// PATCH /rentals/cancellation-requests/:cancellationRequestId/reject
-router.get(
-    "/cancellation-requests/pending",
-    authenticate,
-    authorizeRole("STORE_MANAGER"),
-    getPendingCancellationRequestsController
+    startPreparingOrder
 );
 
 router.patch(
-    "/cancellation-requests/:cancellationRequestId/reject",
+    "/:orderId/reservations/:reservationId/prepare",
     authenticate,
-    authorizeRole("STORE_MANAGER"),
-    validateUuid("cancellationRequestId"),
-    rejectCancellationRequestController
+    staffOnly,
+    validateUuid("orderId"),
+    validateUuid("reservationId"),
+    prepareRentalReservation
 );
 
-// PATCH /rentals/cancellation-requests/:cancellationRequestId/approve
-router.patch(
-    "/cancellation-requests/:cancellationRequestId/approve",
-    authenticate,
-    authorizeRole("STORE_MANAGER"),
-    validateUuid("cancellationRequestId"),
-    approveCancellationRequestController
-);
-
-// POST /rentals/expired/check
-router.post(
-    "/expired/check",
-    authenticate,
-    authorizeRole(
-        "RENTAL_STAFF",
-        "STORE_MANAGER"
-    ),
-    expirePendingPaymentOrdersController
-);
-
-// PATCH /rentals/:id/reservations/:reservationId/replace
 router.patch(
     "/:id/reservations/:reservationId/replace",
     authenticate,
-    authorizeRole("RENTAL_STAFF"),
+    staffOnly,
     validateUuid("id"),
     validateUuid("reservationId"),
     replaceRentalUnitController
 );
 
-// PATCH /rentals/:id/store-cancel
 router.patch(
-    "/:id/store-cancel",
+    "/:id/handover",
     authenticate,
-    authorizeRole("STORE_MANAGER"),
+    staffOnly,
     validateUuid("id"),
-    cancelOrderByStoreController
+    handoverOrder
+);
+
+router.patch(
+    "/:id/no-show",
+    authenticate,
+    staffOnly,
+    validateUuid("id"),
+    markNoShowController
+);
+
+router.patch(
+    "/:id/reservations/:reservationId/fulfillment-failed",
+    authenticate,
+    operationsRoles,
+    validateUuid("id"),
+    validateUuid("reservationId"),
+    markFulfillmentFailedController
+);
+
+router.patch(
+    "/:id/return",
+    authenticate,
+    staffOnly,
+    validateUuid("id"),
+    receiveReturn
+);
+
+router.post(
+    "/:id/items/:itemId/inspection",
+    authenticate,
+    staffOnly,
+    validateUuid("id"),
+    validateUuid("itemId"),
+    inspectOrderItem
+);
+
+router.post(
+    "/:id/settlement",
+    authenticate,
+    staffOnly,
+    validateUuid("id"),
+    settleOrder
+);
+
+router.patch(
+    "/:id/additional-payment",
+    authenticate,
+    staffOnly,
+    validateUuid("id"),
+    confirmAdditionalPaymentController
 );
 
 router.get(
     "/",
     authenticate,
-    authorizeRole(
-        "CUSTOMER",
-        "RENTAL_STAFF",
-        "STORE_MANAGER"
-    ),
+    authorizeRole("CUSTOMER", "RENTAL_STAFF", "STORE_MANAGER"),
     getRentalOrdersController
 );
 
 router.get(
     "/:id/history",
     authenticate,
-    authorizeRole(
-        "CUSTOMER",
-        "RENTAL_STAFF",
-        "STORE_MANAGER"
-    ),
+    authorizeRole("CUSTOMER", "RENTAL_STAFF", "STORE_MANAGER"),
     validateUuid("id"),
     getRentalOrderHistoryController
 );
@@ -201,11 +164,7 @@ router.get(
 router.get(
     "/:id",
     authenticate,
-    authorizeRole(
-        "CUSTOMER",
-        "RENTAL_STAFF",
-        "STORE_MANAGER"
-    ),
+    authorizeRole("CUSTOMER", "RENTAL_STAFF", "STORE_MANAGER"),
     validateUuid("id"),
     getRentalOrderDetailController
 );

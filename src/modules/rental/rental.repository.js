@@ -1,8 +1,5 @@
 import prisma from "../../config/prisma.js";
 import {
-    CancellationRequestStatus,
-    PaymentPurpose,
-    PaymentStatus,
     ReservationStatus,
     RentalOrderStatus,
 } from "../../generated/prisma/client.ts";
@@ -99,12 +96,6 @@ const findRentalOrderForPreparation = async (
                     reservations: true,
                 },
             },
-
-            cancellationRequests: {
-                where: {
-                    status: "REQUESTED",
-                },
-            },
         },
     });
 };
@@ -127,12 +118,6 @@ const findRentalOrderForHandover = async (
                             rentalUnit: true,
                         },
                     },
-                },
-            },
-
-            cancellationRequests: {
-                where: {
-                    status: "REQUESTED",
                 },
             },
         },
@@ -379,6 +364,35 @@ const createFeeApprovalRequest = async (
     });
 };
 
+const recordDirectDeposit = async (
+    orderId,
+    amount,
+    collectedAt,
+    db = prisma
+) => db.rentalOrder.update({
+    where: { orderId },
+    data: {
+        collectedDepositAmount: amount,
+        depositCollectionMethod: "DIRECT",
+        depositCollectedAt: collectedAt,
+        totalPaid: { increment: amount },
+        netCollected: { increment: amount },
+    },
+});
+
+const confirmAdditionalPaymentReceived = async (
+    orderId,
+    amount,
+    db = prisma
+) => db.rentalOrder.update({
+    where: { orderId },
+    data: {
+        additionalPayment: amount,
+        totalPaid: { increment: amount },
+        netCollected: { increment: amount },
+    },
+});
+
 const findLatestFeeApprovalRequest = async (
     rentalOrderId,
     db = prisma
@@ -417,37 +431,7 @@ const findRentalOrderForCompletion = async (
         where: { orderId },
 
         include: {
-            items: {
-                include: {
-                    reservations: true,
-                },
-            },
-
-            payments: {
-                include: {
-                    refunds: true,
-                },
-            },
-        },
-    });
-};
-
-// Tìm tất cả các Reservation có trạng thái "ACTIVE" và "COMPLETED" để hoàn tất đơn hàng
-const completeReservations = async (
-    orderItemIds,
-    db = prisma
-) => {
-    return db.reservation.updateMany({
-        where: {
-            rentalOrderItemId: {
-                in: orderItemIds,
-            },
-
-            status: ReservationStatus.ACTIVE,
-        },
-
-        data: {
-            status: ReservationStatus.COMPLETED,
+            refunds: true,
         },
     });
 };
@@ -529,243 +513,6 @@ const findOverdueRentalOrders = async (
     });
 };
 
-const findOrderForDirectCancellation = async ( // Tìm RentalOrder cùng với các item và reservation liên quan để hủy trực tiếp
-    orderId,
-    customerId,
-    db = prisma
-) => {
-    return db.rentalOrder.findFirst({
-        where: {
-            orderId,
-            customerId,
-        },
-
-        include: {
-            items: {
-                include: {
-                    reservations: true,
-                },
-            },
-        },
-    });
-};
-
-// Hủy tất cả các Reservation có trạng thái "TEMPORARY_HOLD" cho các RentalOrderItem được chỉ định
-const cancelTemporaryReservations = async (
-    orderItemIds,
-    db = prisma
-) => {
-    return db.reservation.updateMany({
-        where: {
-            rentalOrderItemId: {
-                in: orderItemIds,
-            },
-
-            status:
-                ReservationStatus.TEMPORARY_HOLD,
-        },
-
-        data: {
-            status:
-                ReservationStatus.CANCELLED,
-        },
-    });
-};
-
-// Cập nhật trạng thái của RentalOrder thành "CANCELLED" và lưu thông tin hủy
-const cancelRentalOrder = async (
-    orderId,
-    {
-        cancellationReason,
-        cancelledBy,
-        cancelledAt,
-    },
-    db = prisma
-) => {
-    return db.rentalOrder.update({
-        where: { orderId },
-
-        data: {
-            status: RentalOrderStatus.CANCELLED,
-            cancellationReason,
-            cancelledBy,
-            cancelledAt,
-        },
-    });
-};
-
-const cancelPendingPaymentOrder = async ( // Hủy đơn hàng đang chờ thanh toán (trạng thái "PENDING_PAYMENT")
-    orderId,
-    customerId,
-    reason
-) => {
-    return prisma.$transaction(async (tx) => {
-        const order =
-            await findOrderForDirectCancellation(
-                orderId,
-                customerId,
-                tx
-            );
-
-        if (!order) {
-            throw new Error("ORDER_NOT_FOUND");
-        }
-
-        if (
-            order.status !==
-            RentalOrderStatus.PENDING_PAYMENT
-        ) {
-            throw new Error(
-                "DIRECT_CANCELLATION_NOT_ALLOWED"
-            );
-        }
-
-        const orderItemIds = order.items.map(
-            (item) => item.orderItemId
-        );
-
-        const now = new Date();
-
-        const cancelledOrder =
-            await cancelRentalOrder(
-                orderId,
-                {
-                    cancellationReason:
-                        reason ?? null,
-                    cancelledBy: customerId,
-                    cancelledAt: now,
-                },
-                tx
-            );
-
-        await cancelTemporaryReservations(
-            orderItemIds,
-            tx
-        );
-
-        await createOrderStatusHistory(
-            {
-                rentalOrderId: orderId,
-                oldStatus:
-                    RentalOrderStatus.PENDING_PAYMENT,
-                newStatus:
-                    RentalOrderStatus.CANCELLED,
-                changedBy: customerId,
-                changedAt: now,
-                reason:
-                    reason ?? "Cancelled by customer",
-            },
-            tx
-        );
-
-        return cancelledOrder;
-    });
-};
-
-// Tìm RentalOrder cùng với các yêu cầu hủy đang chờ xử lý để kiểm tra xem có thể hủy đơn hàng đang chờ thanh toán hay không
-const findOrderForCancellationRequest = async (
-    orderId,
-    customerId,
-    db = prisma
-) => {
-    return db.rentalOrder.findFirst({
-        where: {
-            orderId,
-            customerId,
-        },
-
-        include: {
-            cancellationRequests: {
-                where: {
-                    status: "REQUESTED",
-                },
-            },
-        },
-    });
-};
-
-// Tạo một yêu cầu hủy đơn hàng mới
-const createCancellationRequest = async (
-    data,
-    db = prisma
-) => {
-    return db.cancellationRequest.create({
-        data,
-    });
-};
-
-// Tìm RentalOrder cùng với các yêu cầu hủy đang chờ xử lý để quyết định hủy đơn hàng
-const findCancellationRequestForDecision = async (
-    cancellationRequestId,
-    db = prisma
-) => {
-    return db.cancellationRequest.findUnique({
-        where: {
-            cancellationRequestId,
-        },
-
-        include: {
-            policy: true,
-
-            rentalOrder: {
-                include: {
-                    items: true,
-
-                    payments: {
-                        where: {
-                            purpose:
-                                PaymentPurpose.UPFRONT,
-                            status:
-                                PaymentStatus.SUCCESS,
-                        },
-
-                        orderBy: {
-                            paidAt: "desc",
-                        },
-
-                        take: 1,
-                    },
-                },
-            },
-        },
-    });
-};
-
-// Cập nhật thông tin của CancellationRequest
-const cancelConfirmedReservations = async (
-    orderItemIds,
-    db = prisma
-) => {
-    return db.reservation.updateMany({
-        where: {
-            rentalOrderItemId: {
-                in: orderItemIds,
-            },
-
-            status: ReservationStatus.CONFIRMED,
-        },
-
-        data: {
-            status: ReservationStatus.CANCELLED,
-        },
-    });
-};
-
-// Cập nhật trạng thái của CancellationRequest
-const updateCancellationRequest = async (
-    cancellationRequestId,
-    data,
-    db = prisma
-) => {
-    return db.cancellationRequest.update({
-        where: {
-            cancellationRequestId,
-        },
-
-        data,
-    });
-};
-
 // Tìm tất cả các RentalOrder có trạng thái "PENDING_PAYMENT" và các Reservation tạm giữ đã hết hạn
 const findExpiredPendingPaymentOrders = async (
     now = new Date(),
@@ -844,15 +591,7 @@ const findReservationForReplacement = async (
 
             rentalOrderItem: {
                 include: {
-                    order: {
-                        include: {
-                            cancellationRequests: {
-                                where: {
-                                    status: "REQUESTED",
-                                },
-                            },
-                        },
-                    },
+                    order: true,
                 },
             },
         },
@@ -880,21 +619,46 @@ const releaseReservationForReplacement = async (
     });
 };
 
-// Tìm RentalOrder cùng với các item và reservation liên quan để hủy đơn hàng tại cửa hàng
-const findOrderForStoreCancellation = async (
+const findOrderForPreHandoverResolution = async (
     orderId,
     db = prisma
-) => {
-    return db.rentalOrder.findUnique({
-        where: {
-            orderId,
+) => db.rentalOrder.findUnique({
+    where: { orderId },
+    include: {
+        items: {
+            include: {
+                reservations: {
+                    include: { rentalUnit: true },
+                },
+            },
         },
+    },
+});
 
-        include: {
-            items: true,
+const releaseCurrentReservations = async (
+    orderItemIds,
+    db = prisma
+) => db.reservation.updateMany({
+    where: {
+        rentalOrderItemId: { in: orderItemIds },
+        status: {
+            in: [
+                ReservationStatus.CONFIRMED,
+                ReservationStatus.TEMPORARY_HOLD,
+            ],
         },
-    });
-};
+    },
+    data: { status: ReservationStatus.RELEASED },
+});
+
+const markOrderTerminalBeforeHandover = async (
+    orderId,
+    status,
+    db = prisma
+) => db.rentalOrder.update({
+    where: { orderId },
+    data: { status },
+});
 
 const markRentalUnitAsPreparing = async (
     rentalUnitId,
@@ -922,60 +686,6 @@ const expirePendingPaymentOrder = async (
         },
         data: {
             status: RentalOrderStatus.EXPIRED,
-        },
-    });
-};
-
-const findPendingCancellationRequests = async (
-    db = prisma
-) => {
-    return db.cancellationRequest.findMany({
-        where: {
-            status: CancellationRequestStatus.REQUESTED,
-        },
-        select: {
-            cancellationRequestId: true,
-            rentalOrderId: true,
-            reason: true,
-            requestedBy: true,
-            requestedAt: true,
-            policy: {
-                select: {
-                    policyId: true,
-                    version: true,
-                    effectiveFrom: true,
-                },
-            },
-            requester: {
-                select: {
-                    userId: true,
-                    fullName: true,
-                    email: true,
-                    phone: true,
-                },
-            },
-            rentalOrder: {
-                select: {
-                    orderId: true,
-                    status: true,
-                    rentalStartAt: true,
-                    returnDueAt: true,
-                    rentalAmount: true,
-                    depositAmount: true,
-                    totalPaid: true,
-                    customer: {
-                        select: {
-                            userId: true,
-                            fullName: true,
-                            email: true,
-                            phone: true,
-                        },
-                    },
-                },
-            },
-        },
-        orderBy: {
-            requestedAt: "asc",
         },
     });
 };
@@ -1051,9 +761,9 @@ const findRentalOrderDetail = async (
                     createdAt: "asc",
                 },
             },
-            cancellationRequests: {
+            refunds: {
                 orderBy: {
-                    requestedAt: "asc",
+                    createdAt: "asc",
                 },
             },
         },
@@ -1100,6 +810,8 @@ export {
     findRentalOrderForPreparation,
     findRentalOrderForHandover,
     markOrderAsRenting,
+    recordDirectDeposit,
+    confirmAdditionalPaymentReceived,
     activateReservations,
     markRentalUnitsAsRented,
     createRentalUnitStatusHistory,
@@ -1114,29 +826,20 @@ export {
     findLatestFeeApprovalRequest,
     updateRentalOrderSettlement,
     findRentalOrderForCompletion,
-    completeReservations,
     findRentalUnitById,
     updateRentalUnitStatus,
     markRentalUnitAsPreparing,
     findFeeApprovalRequestById,
     updateFeeApprovalRequest,
     findOverdueRentalOrders,
-    findOrderForDirectCancellation,
-    cancelTemporaryReservations,
-    cancelRentalOrder,
-    cancelPendingPaymentOrder,
-    findOrderForCancellationRequest,
-    createCancellationRequest,
-    findCancellationRequestForDecision,
-    findPendingCancellationRequests,
-    updateCancellationRequest,
-    cancelConfirmedReservations,
     findExpiredPendingPaymentOrders,
     expireTemporaryReservations,
     expirePendingPaymentOrder,
     findReservationForReplacement,
     releaseReservationForReplacement,
-    findOrderForStoreCancellation,
+    findOrderForPreHandoverResolution,
+    releaseCurrentReservations,
+    markOrderTerminalBeforeHandover,
     findRentalOrders,
     findRentalOrderDetail,
     findRentalOrderOwnership,

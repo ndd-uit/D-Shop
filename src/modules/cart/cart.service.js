@@ -2,6 +2,7 @@ import { updateRentalPeriod, deleteCartItem, findCartItemById, findCartByCustome
 import { getGarmentById } from "../garment/garment.service.js";
 import { checkAvailability } from "../availability/availability.service.js";
 import { validateUuidValue } from "../../utils/validation.js";
+import { normalizeRentalPeriod } from "../../utils/rentalPeriod.js";
 // Lay cart cua customer: chi tim --> k co --> null
 const getCart = async (customerId) => {
     return findCartByCustomerId(customerId)
@@ -139,13 +140,13 @@ const updateCartRentalPeriod = async (customerId, rentalStartAt, returnDueAt) =>
     if (!cart) {
         throw new Error("CART_NOT_FOUND");
     }
-    // đổi string từ body thành Date để Prisma lưu vào DateTime
-    const start = new Date(rentalStartAt);
-    const end = new Date(returnDueAt);
-    // Kiểm tra tính hợp lệ của ngày
-    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
-        throw new Error("INVALID_RENTAL_PERIOD");
-    }
+    const {
+        rentalStartAt: start,
+        returnDueAt: end,
+    } = normalizeRentalPeriod(
+        rentalStartAt,
+        returnDueAt
+    );
     // Check tat ca item trong cart co du RentalUnit kha dung khong, tat ca hop le --> update thoi gian
     for (const item of cart.items) {
         const result = await checkAvailability({

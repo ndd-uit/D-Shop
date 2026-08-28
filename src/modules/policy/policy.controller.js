@@ -79,8 +79,6 @@ const createRentalPolicyVersionController = async (
             error.message === "INVALID_EFFECTIVE_FROM" ||
             error.message ===
                 "INVALID_POLICY_NUMERIC_FIELDS" ||
-            error.message ===
-                "INVALID_CANCELLATION_POLICY" ||
             error.message === "INVALID_LATE_FEE_POLICY"
         ) {
             const messages = {
@@ -90,8 +88,6 @@ const createRentalPolicyVersionController = async (
                     "Thời điểm bắt đầu hiệu lực không hợp lệ",
                 INVALID_POLICY_NUMERIC_FIELDS:
                     "Các giá trị số của chính sách không hợp lệ",
-                INVALID_CANCELLATION_POLICY:
-                    "Cấu hình chính sách hủy không hợp lệ",
                 INVALID_LATE_FEE_POLICY:
                     "Cấu hình chính sách phí trả trễ không hợp lệ",
             };

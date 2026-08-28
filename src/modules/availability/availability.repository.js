@@ -10,9 +10,9 @@ const findActiveRentalPolicy = async (at = new Date(), db = prisma) => {
         // SELECT *
         // FROM rentalPolicy
         // WHERE effectiveFrom <= at
-        // AND (effectiveTo IS NULL OR effectiveTo >= at)
+        // AND (effectiveTo IS NULL OR effectiveTo > at)
         // ORDER BY effectiveFrom DESC LIMIT 1
-        // Y nghia: tim chinh sach co ngay hieu luc nho nhat nhung van lon hon hoac bang at, va ngay het hieu luc lon hon hoac bang at hoac null
+        // Khoang hieu luc nua mo: effectiveFrom <= at < effectiveTo.
         where: {
             effectiveFrom: {
                 lte: at, // lte: less than or equal to
@@ -22,7 +22,7 @@ const findActiveRentalPolicy = async (at = new Date(), db = prisma) => {
                     effectiveTo: null, // null: chua co ngay het hieu luc
                 }, {
                     effectiveTo: {
-                        gte: at, // gte: greater than or equal to
+                        gt: at, // Khoảng hiệu lực nửa mở: effectiveFrom <= at < effectiveTo
                     },
                 }
             ],

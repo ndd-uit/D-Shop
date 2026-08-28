@@ -5,10 +5,7 @@ import {
     findAllRentalPolicies,
     findRentalPolicyByVersion,
 } from "./policy.repository.js";
-import {
-    validateCancellationPolicy,
-    validateLateFeePolicy,
-} from "./policy.validator.js";
+import { validateLateFeePolicy } from "./policy.validator.js";
 
 const normalizeNonNegativeInteger = (value) => {
     if (
@@ -86,13 +83,10 @@ const getActiveRentalPolicy = async () => {
 const createRentalPolicyVersion = async ({
     version,
     effectiveFrom,
-    preparationBuffer,
-    cleaningBuffer,
     holdDuration,
     approvalThreshold,
     lateFeePolicy,
     damageFeePolicy,
-    cancellationPolicy,
 }, managerId) => {
     const normalizedVersion = version?.trim();
 
@@ -133,23 +127,10 @@ const createRentalPolicyVersion = async ({
                     );
                 }
 
-                const finalCancellationPolicy =
-                    cancellationPolicy ??
-                    current.cancellationPolicy;
                 const finalLateFeePolicy =
                     lateFeePolicy ??
                     current.lateFeePolicy;
 
-                const finalPreparationBuffer =
-                    normalizeNonNegativeInteger(
-                        preparationBuffer ??
-                        current.preparationBuffer
-                    );
-                const finalCleaningBuffer =
-                    normalizeNonNegativeInteger(
-                        cleaningBuffer ??
-                        current.cleaningBuffer
-                    );
                 const finalHoldDuration =
                     normalizeNonNegativeInteger(
                         holdDuration ??
@@ -161,9 +142,6 @@ const createRentalPolicyVersion = async ({
                         current.approvalThreshold
                     );
 
-                validateCancellationPolicy(
-                    finalCancellationPolicy
-                );
                 validateLateFeePolicy(
                     finalLateFeePolicy
                 );
@@ -173,10 +151,6 @@ const createRentalPolicyVersion = async ({
                         version: normalizedVersion,
                         effectiveFrom: startAt,
                         effectiveTo: null,
-                        preparationBuffer:
-                            finalPreparationBuffer,
-                        cleaningBuffer:
-                            finalCleaningBuffer,
                         holdDuration:
                             finalHoldDuration,
                         approvalThreshold:
@@ -186,8 +160,6 @@ const createRentalPolicyVersion = async ({
                         damageFeePolicy:
                             damageFeePolicy ??
                             current.damageFeePolicy,
-                        cancellationPolicy:
-                            finalCancellationPolicy,
                         createdBy: managerId,
                         createdAt: new Date(),
                     },

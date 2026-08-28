@@ -23,6 +23,7 @@ import {
 } from './garment.repository.js'
 import { checkAvailability } from "../availability/availability.service.js";
 import { validateUuidValue } from "../../utils/validation.js";
+import { normalizeRentalPeriod } from "../../utils/rentalPeriod.js";
 
 const normalizeOptionalSearchText = (
     value,
@@ -117,16 +118,13 @@ const getGarments = async (query = {}) => {
             throw new Error("INVALID_RENTAL_PERIOD");
         }
 
-        rentalStartAt = new Date(query.rentalStartAt);
-        returnDueAt = new Date(query.returnDueAt);
-
-        if (
-            Number.isNaN(rentalStartAt.getTime()) ||
-            Number.isNaN(returnDueAt.getTime()) ||
-            rentalStartAt >= returnDueAt
-        ) {
-            throw new Error("INVALID_RENTAL_PERIOD");
-        }
+        ({
+            rentalStartAt,
+            returnDueAt,
+        } = normalizeRentalPeriod(
+            query.rentalStartAt,
+            query.returnDueAt
+        ));
     }
 
     const garments = await findAllActiveGarments({
