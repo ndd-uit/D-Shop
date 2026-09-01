@@ -20,7 +20,27 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors()); // Cho phép các yêu cầu từ các nguồn khác nhau
+const allowedCorsOrigins = new Set(
+    (process.env.CORS_ORIGINS || "")
+        .split(",")
+        .map((origin) => origin.trim().replace(/\/$/, ""))
+        .filter(Boolean)
+);
+
+app.use(cors({
+    origin(origin, callback) {
+        if (
+            !origin ||
+            allowedCorsOrigins.size === 0 ||
+            allowedCorsOrigins.has(origin.replace(/\/$/, ""))
+        ) {
+            callback(null, true);
+            return;
+        }
+
+        callback(null, false);
+    },
+}));
 app.use(express.json()); // Cho phép phân tích cú pháp JSON trong body của yêu cầu
 
 // Định nghĩa các route
