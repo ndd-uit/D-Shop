@@ -48,8 +48,13 @@ const authenticate = async (req, res, next) => {
             },
             select: {
                 userId: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                nationalId: true,
                 role: true,
                 isActive: true,
+                createdAt: true,
             },
         });
 
@@ -71,6 +76,7 @@ const authenticate = async (req, res, next) => {
             userId: user.userId,
             role: user.role,
         };
+        req.authenticatedUser = user;
 
         return next();
     } catch (error) {

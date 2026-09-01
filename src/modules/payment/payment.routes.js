@@ -14,9 +14,15 @@ import {
     refundFailedController,
     refundSucceededController,
     retryFailedRefundController,
+    sePayPaymentIpnController,
 } from "./payment.controller.js";
 
 const router = Router();
+
+router.post(
+    "/webhooks/sepay/ipn",
+    sePayPaymentIpnController
+);
 
 router.get(
     "/refunds",

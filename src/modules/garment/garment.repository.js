@@ -16,6 +16,9 @@ const findAllActiveGarments = async (
     return db.garment.findMany({
         where: {
             isActive: true,
+            category: {
+                isActive: true,
+            },
             ...(keyword
                 ? {
                     OR: [
@@ -81,16 +84,43 @@ const findAllActiveGarments = async (
     });
 };
 
-const findGarmentById = async (garmentId) => {
-    return await prisma.garment.findUnique({
+const findGarmentById = async (
+    garmentId,
+    db = prisma
+) => {
+    return db.garment.findFirst({
         where: {
-            garmentId: garmentId,
+            garmentId,
+            isActive: true,
+            category: {
+                isActive: true,
+            },
         },
-        include: {
-            category: true,
-            rentalUnits: true,
-        }
-    })
+        select: {
+            garmentId: true,
+            categoryId: true,
+            name: true,
+            description: true,
+            color: true,
+            imageUrls: true,
+            rentalPrice: true,
+            depositAmount: true,
+            isActive: true,
+            category: {
+                select: {
+                    categoryId: true,
+                    name: true,
+                },
+            },
+            rentalUnits: {
+                select: {
+                    rentalUnitId: true,
+                    size: true,
+                    status: true,
+                },
+            },
+        },
+    });
 }
 
 const findAllCategories = async (
@@ -200,10 +230,24 @@ const findRentalUnitsForManagement = async (
     db = prisma
 ) => {
     return db.rentalUnit.findMany({
-        include: {
+        select: {
+            rentalUnitId: true,
+            garmentId: true,
+            assetCode: true,
+            size: true,
+            condition: true,
+            status: true,
+            createdAt: true,
             garment: {
-                include: {
-                    category: true,
+                select: {
+                    garmentId: true,
+                    name: true,
+                    category: {
+                        select: {
+                            categoryId: true,
+                            name: true,
+                        },
+                    },
                 },
             },
         },
@@ -225,6 +269,20 @@ const findRentalUnitForManagementById = async (
             garment: {
                 include: {
                     category: true,
+                },
+            },
+            statusHistory: {
+                include: {
+                    changedByUser: {
+                        select: {
+                            userId: true,
+                            fullName: true,
+                            role: true,
+                        },
+                    },
+                },
+                orderBy: {
+                    changedAt: "desc",
                 },
             },
         },

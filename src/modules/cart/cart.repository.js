@@ -1,20 +1,44 @@
 import prisma from "../../config/prisma.js";
 
-const findCartByCustomerId = async (customerId) => {
-    return prisma.rentalCart.findUnique({
+const findCartByCustomerId = async (customerId, db = prisma) => {
+    return db.rentalCart.findUnique({
         where: {
             customerId,
         },
         include: {
             items: {
-                include: {
+                select: {
+                    cartItemId: true,
+                    cartId: true,
+                    garmentId: true,
+                    requestedSize: true,
+                    quantity: true,
                     garment: {
-                        include: {
-                            category: true,
-                            rentalUnits: true,
+                        select: {
+                            garmentId: true,
+                            name: true,
+                            imageUrls: true,
+                            rentalPrice: true,
+                            depositAmount: true,
+                            isActive: true,
                         },
                     },
                 },
+            },
+        },
+    });
+};
+
+const deleteCartItems = async (
+    cartId,
+    cartItemIds,
+    db = prisma
+) => {
+    return db.rentalCartItem.deleteMany({
+        where: {
+            cartId,
+            cartItemId: {
+                in: cartItemIds,
             },
         },
     });
@@ -95,4 +119,14 @@ const updateRentalPeriod = async (cartId, rentalStartAt, returnDueAt) => {
     });
 }
 
-export { updateRentalPeriod, deleteCartItem, findCartItemById, findCartByCustomerId, createCart, findCartItem, createCartItem, updateCartItemQuantity };
+export {
+    createCart,
+    createCartItem,
+    deleteCartItem,
+    deleteCartItems,
+    findCartByCustomerId,
+    findCartItem,
+    findCartItemById,
+    updateCartItemQuantity,
+    updateRentalPeriod,
+};

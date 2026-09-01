@@ -12,7 +12,7 @@ const createPaymentRequest = async ({
     return {
         gateway: "MOCK",
         paymentUrl:
-            `https://mock-payment.attira.local/payments/${paymentId}`,
+            `https://mock-payment.dshop.test/payments/${paymentId}`,
         gatewayReference: `MOCK-PAYMENT-${paymentId}`,
         request: {
             orderId,

@@ -7,6 +7,7 @@ import {
     getGarmentById,
     getGarmentsForManagement,
     getRentalUnitsForManagement,
+    getRentalUnitForManagement,
     updateCategoryService,
     updateCategoryStatusService,
     updateGarmentService,
@@ -14,6 +15,12 @@ import {
     updateRentalUnitService,
     retireRentalUnitService,
 } from './garment.service.js'
+import {
+    buildGarmentBodyWithUploadedImages,
+    getGarmentBucket,
+    removeUploadedObjects,
+    uploadGarmentImagesToStorage,
+} from './garmentImage.storage.js';
 
 
 const getAllGarments = async (req, res) => {
@@ -263,9 +270,18 @@ const createGarmentController = async (
     req,
     res
 ) => {
+    let uploadedImages = [];
+
     try {
+        uploadedImages =
+            await uploadGarmentImagesToStorage(
+                req.files ?? []
+            );
         const garment = await createGarmentService(
-            req.body ?? {}
+            buildGarmentBodyWithUploadedImages(
+                req.body ?? {},
+                uploadedImages
+            )
         );
 
         return res.status(201).json({
@@ -274,6 +290,15 @@ const createGarmentController = async (
             data: garment,
         });
     } catch (error) {
+        if (uploadedImages.length) {
+            await removeUploadedObjects(
+                uploadedImages.map(
+                    (image) => image.objectPath
+                ),
+                { bucket: getGarmentBucket() }
+            );
+        }
+
         return handleGarmentManagementError(
             error,
             res,
@@ -286,10 +311,19 @@ const updateGarmentController = async (
     req,
     res
 ) => {
+    let uploadedImages = [];
+
     try {
+        uploadedImages =
+            await uploadGarmentImagesToStorage(
+                req.files ?? []
+            );
         const garment = await updateGarmentService(
             req.params.garmentId,
-            req.body ?? {}
+            buildGarmentBodyWithUploadedImages(
+                req.body ?? {},
+                uploadedImages
+            )
         );
 
         return res.status(200).json({
@@ -298,6 +332,15 @@ const updateGarmentController = async (
             data: garment,
         });
     } catch (error) {
+        if (uploadedImages.length) {
+            await removeUploadedObjects(
+                uploadedImages.map(
+                    (image) => image.objectPath
+                ),
+                { bucket: getGarmentBucket() }
+            );
+        }
+
         return handleGarmentManagementError(
             error,
             res,
@@ -337,6 +380,40 @@ const handleGarmentManagementError = (
     res,
     fallbackMessage
 ) => {
+    if (
+        error.message ===
+        "INVALID_GARMENT_IMAGE_CONTENT"
+    ) {
+        return res.status(400).json({
+            success: false,
+            message:
+                "Nội dung file ảnh không hợp lệ",
+        });
+    }
+
+    if (
+        error.message ===
+        "SUPABASE_STORAGE_NOT_CONFIGURED"
+    ) {
+        return res.status(503).json({
+            success: false,
+            message:
+                "Dịch vụ lưu trữ ảnh chưa được cấu hình",
+        });
+    }
+
+    if (
+        error.message ===
+        "GARMENT_IMAGE_UPLOAD_FAILED"
+    ) {
+        console.error(error.cause ?? error);
+        return res.status(502).json({
+            success: false,
+            message:
+                "Không thể tải ảnh lên dịch vụ lưu trữ",
+        });
+    }
+
     if (
         error.message === "INVALID_GARMENT_DATA" ||
         error.message ===
@@ -411,6 +488,35 @@ const getRentalUnitsForManagementController = async (
             success: false,
             message:
                 "Không thể lấy danh sách RentalUnit",
+        });
+    }
+};
+
+const getRentalUnitForManagementController = async (
+    req,
+    res
+) => {
+    try {
+        const unit = await getRentalUnitForManagement(
+            req.params.rentalUnitId
+        );
+
+        return res.status(200).json({
+            success: true,
+            data: unit,
+        });
+    } catch (error) {
+        if (error.message === "RENTAL_UNIT_NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message: "Không tìm thấy RentalUnit",
+            });
+        }
+
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: "Không thể lấy chi tiết RentalUnit",
         });
     }
 };
@@ -578,6 +684,7 @@ export {
     updateGarmentController,
     updateGarmentStatusController,
     getRentalUnitsForManagementController,
+    getRentalUnitForManagementController,
     createRentalUnitController,
     updateRentalUnitController,
     retireRentalUnitController,

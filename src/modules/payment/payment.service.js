@@ -15,6 +15,11 @@ import {
     createRefundRequest,
 } from "./gateway/paymentGateway.js";
 import {
+    parsePaymentNotification,
+    validatePaymentNotification,
+    verifyWebhookSecret,
+} from "./gateway/sepayPaymentGateway.js";
+import {
     addRefundToOrderTotals,
     addRentalPaymentToOrderTotals,
     confirmRentalOrder,
@@ -115,6 +120,41 @@ const hasValidTemporaryHolds = (order, now) =>
             reservation.holdExpiresAt > now
         )
     );
+
+const getPaymentProcessingState = (
+    payment,
+    normalizedRef
+) => {
+    if (
+        payment.status === PaymentStatus.SUCCEEDED &&
+        payment.transactionRef === normalizedRef
+    ) {
+        return "ALREADY_PROCESSED";
+    }
+
+    if (payment.status !== PaymentStatus.PENDING) {
+        throw new Error("PAYMENT_ALREADY_PROCESSED");
+    }
+
+    return "PROCESS";
+};
+
+const getRentalPaymentResolution = (order, now) => {
+    if (
+        order.status === RentalOrderStatus.PENDING_PAYMENT &&
+        hasValidTemporaryHolds(order, now)
+    ) {
+        return "CONFIRM";
+    }
+
+    if (
+        order.status === RentalOrderStatus.PENDING_PAYMENT
+    ) {
+        return "EXPIRE_AND_REFUND";
+    }
+
+    return "REFUND_ONLY";
+};
 
 const createPaymentAttempt = async ({
     orderId,
@@ -296,18 +336,16 @@ const processPaymentSucceeded = async (
             }
 
             if (
-                payment.status === PaymentStatus.SUCCEEDED &&
-                payment.transactionRef === normalizedRef
+                getPaymentProcessingState(
+                    payment,
+                    normalizedRef
+                ) === "ALREADY_PROCESSED"
             ) {
                 return {
                     payment,
                     alreadyProcessed: true,
                     rentalRefund: null,
                 };
-            }
-
-            if (payment.status !== PaymentStatus.PENDING) {
-                throw new Error("PAYMENT_ALREADY_PROCESSED");
             }
 
             const conflicting =
@@ -367,15 +405,14 @@ const processPaymentSucceeded = async (
                 tx
             );
 
-            const validHolds = hasValidTemporaryHolds(
+            const rentalPaymentResolution =
+                getRentalPaymentResolution(
                 order,
                 now
             );
 
             if (
-                validHolds &&
-                order.status ===
-                    RentalOrderStatus.PENDING_PAYMENT
+                rentalPaymentResolution === "CONFIRM"
             ) {
                 await confirmRentalOrder(order.orderId, tx);
                 await confirmReservations(
@@ -404,8 +441,8 @@ const processPaymentSucceeded = async (
             }
 
             if (
-                order.status ===
-                RentalOrderStatus.PENDING_PAYMENT
+                rentalPaymentResolution ===
+                "EXPIRE_AND_REFUND"
             ) {
                 await tx.rentalOrder.update({
                     where: { orderId: order.orderId },
@@ -471,6 +508,24 @@ const processPaymentSucceeded = async (
     }
 
     return result;
+};
+
+const processSePayPaymentIpn = async (
+    payload,
+    receivedSecret
+) => {
+    verifyWebhookSecret(receivedSecret);
+    const notification = parsePaymentNotification(payload);
+    const payment = await findPaymentById(
+        notification.paymentId
+    );
+
+    validatePaymentNotification(payment, notification);
+
+    return processPaymentSucceeded(
+        notification.paymentId,
+        notification.transactionRef
+    );
 };
 
 const processPaymentFailed = async (
@@ -576,7 +631,17 @@ const createOrderRefund = async ({
 
             let relatedPaymentId = paymentId;
 
-            if (!relatedPaymentId && type === RefundType.RENTAL_REFUND) {
+            if (type === RefundType.DEPOSIT_RETURN) {
+                const depositPayment =
+                    await findPaymentByPurposeAndStatus(
+                        orderId,
+                        PaymentPurpose.DEPOSIT,
+                        PaymentStatus.SUCCEEDED,
+                        tx
+                    );
+                relatedPaymentId =
+                    depositPayment?.paymentId ?? null;
+            } else if (!relatedPaymentId) {
                 const rentalPayment =
                     await findSuccessfulRentalPayment(
                         orderId,
@@ -844,7 +909,10 @@ export {
     getRefunds,
     processPaymentFailed,
     processPaymentSucceeded,
+    processSePayPaymentIpn,
     processRefundFailed,
     processRefundSucceeded,
     retryFailedRefund,
+    getPaymentProcessingState,
+    getRentalPaymentResolution,
 };

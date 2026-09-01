@@ -3,6 +3,7 @@ import {
     confirmAdditionalPayment,
     createRental,
     decideFeeApproval,
+    getFeeApprovalRequests,
     expirePendingPaymentOrders,
     getRentalOrderDetail,
     getRentalOrderHistory,
@@ -18,6 +19,46 @@ import {
     settleRentalOrder,
     startPreparingRentalOrder,
 } from "./rental.service.js";
+import {
+    getGarmentBucket,
+    removeUploadedObjects,
+    uploadGarmentImagesToStorage,
+} from "../garment/garmentImage.storage.js";
+
+const cleanupEvidenceUploads = async (uploadedImages) => {
+    if (!uploadedImages.length) return;
+
+    await removeUploadedObjects(
+        uploadedImages.map((image) => image.objectPath),
+        { bucket: getGarmentBucket() }
+    );
+};
+
+const handleEvidenceUploadError = (error, res) => {
+    if (error.message === "INVALID_GARMENT_IMAGE_CONTENT") {
+        return res.status(400).json({
+            success: false,
+            message: "Nội dung file ảnh bằng chứng không hợp lệ",
+        });
+    }
+
+    if (error.message === "SUPABASE_STORAGE_NOT_CONFIGURED") {
+        return res.status(503).json({
+            success: false,
+            message: "Dịch vụ lưu trữ ảnh chưa được cấu hình",
+        });
+    }
+
+    if (error.message === "GARMENT_IMAGE_UPLOAD_FAILED") {
+        console.error(error.cause ?? error);
+        return res.status(502).json({
+            success: false,
+            message: "Không thể tải ảnh bằng chứng lên dịch vụ lưu trữ",
+        });
+    }
+
+    return null;
+};
 
 const handleGatewayRequestError = (error, res) => {
     if (error.message !== "GATEWAY_REQUEST_FAILED") {
@@ -34,8 +75,17 @@ const handleGatewayRequestError = (error, res) => {
 const createRentalOrder = async (req, res) => {
     try {
         const customerId = req.user.userId;
-        const { pickupInfo, returnInfo } = req.body ?? {};
-        const result = await createRental(customerId, pickupInfo, returnInfo);
+        const {
+            pickupInfo,
+            returnInfo,
+            selectedCartItemIds,
+        } = req.body ?? {};
+        const result = await createRental(
+            customerId,
+            pickupInfo,
+            returnInfo,
+            selectedCartItemIds
+        );
         return res.status(201).json({
 
             success: true,
@@ -102,6 +152,33 @@ const getRentalOrdersController = async (
                 success: false,
                 message:
                     "Bạn không có quyền xem danh sách đơn thuê",
+            });
+        }
+        if (
+            error.message === "SELECTED_CART_ITEMS_REQUIRED" ||
+            error.message === "INVALID_CART_ITEM_ID" ||
+            error.message === "DUPLICATE_CART_ITEM_IDS"
+        ) {
+            return res.status(400).json({
+                success: false,
+                message:
+                    error.message === "DUPLICATE_CART_ITEM_IDS"
+                        ? "Danh sách sản phẩm được chọn không được trùng lặp"
+                        : "Vui lòng chọn ít nhất một sản phẩm hợp lệ để đặt thuê",
+            });
+        }
+        if (error.message === "CART_ITEM_NOT_FOUND") {
+            return res.status(404).json({
+                success: false,
+                message:
+                    "Một hoặc nhiều sản phẩm được chọn không thuộc giỏ thuê của bạn",
+            });
+        }
+        if (error.message === "CART_ITEMS_CHANGED") {
+            return res.status(409).json({
+                success: false,
+                message:
+                    "Giỏ thuê đã thay đổi, vui lòng tải lại và thử lại",
             });
         }
 
@@ -247,6 +324,8 @@ const startPreparingOrder = async (req, res) => {
 
 // Controller to prepare a rental reservation
 const prepareRentalReservation = async (req, res) => {
+    let uploadedImages = [];
+
     try {
         const staffId = req.user.userId;
 
@@ -261,13 +340,20 @@ const prepareRentalReservation = async (req, res) => {
             preparationImages,
         } = req.body ?? {};
 
+        uploadedImages = await uploadGarmentImagesToStorage(
+            req.files ?? []
+        );
+        const storedPreparationImages = uploadedImages.length
+            ? JSON.stringify(uploadedImages.map((image) => image.publicUrl))
+            : preparationImages;
+
         const result = await prepareReservation(
             orderId,
             reservationId,
             staffId,
             preparationCondition,
             preparationNotes,
-            preparationImages
+            storedPreparationImages
         );
 
         return res.status(200).json({
@@ -275,6 +361,10 @@ const prepareRentalReservation = async (req, res) => {
             data: result,
         });
     } catch (error) {
+        await cleanupEvidenceUploads(uploadedImages);
+        const uploadError = handleEvidenceUploadError(error, res);
+        if (uploadError) return uploadError;
+
         if (error.message === "INVALID_PREPARATION_DATA") {
             return res.status(400).json({
                 success: false,
@@ -526,15 +616,31 @@ const receiveReturn = async (req, res) => {
 };
 
 const inspectOrderItem = async (req, res) => {
+    let uploadedImages = [];
+
     try {
         const { id, itemId } = req.params;
         const staffId = req.user.userId;
+
+        uploadedImages = await uploadGarmentImagesToStorage(
+            req.files ?? []
+        );
+        const inspectionData = {
+            ...(req.body ?? {}),
+            ...(uploadedImages.length
+                ? {
+                    evidenceUrls: uploadedImages.map(
+                        (image) => image.publicUrl
+                    ),
+                }
+                : {}),
+        };
 
         const result = await inspectRentalOrderItem(
             id,
             itemId,
             staffId,
-            req.body ?? {}
+            inspectionData
         );
 
         return res.status(201).json({
@@ -542,6 +648,10 @@ const inspectOrderItem = async (req, res) => {
             data: result,
         });
     } catch (error) {
+        await cleanupEvidenceUploads(uploadedImages);
+        const uploadError = handleEvidenceUploadError(error, res);
+        if (uploadError) return uploadError;
+
         if (error.message === "ORDER_NOT_FOUND") {
             return res.status(404).json({
                 success: false,
@@ -1063,6 +1173,32 @@ const replaceRentalUnitController = async (
     }
 };
 
+const getFeeApprovalRequestsController = async (req, res) => {
+    try {
+        const data = await getFeeApprovalRequests(
+            req.query.status || null
+        );
+
+        return res.status(200).json({
+            success: true,
+            data,
+        });
+    } catch (error) {
+        if (error.message === "INVALID_FEE_APPROVAL_STATUS") {
+            return res.status(400).json({
+                success: false,
+                message: "Trạng thái yêu cầu phê duyệt không hợp lệ",
+            });
+        }
+
+        console.error(error);
+        return res.status(500).json({
+            success: false,
+            message: "Không thể tải danh sách phí cần phê duyệt",
+        });
+    }
+};
+
 const markNoShowController = async (req, res) => {
     try {
         const data = await markRentalOrderNoShow(
@@ -1098,6 +1234,18 @@ const markNoShowController = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 message: "Không thể đánh dấu không đến nhận sau khi đã thu tiền cọc",
+            });
+        }
+        if (error.message === "ORDER_ALREADY_PICKED_UP") {
+            return res.status(409).json({
+                success: false,
+                message: "Không thể đánh dấu không đến nhận sau khi đã bàn giao đơn",
+            });
+        }
+        if (error.message === "NO_SHOW_TOO_EARLY") {
+            return res.status(409).json({
+                success: false,
+                message: "Chỉ có thể đánh dấu không đến nhận sau 18:00 ngày nhận",
             });
         }
         console.error(error);
@@ -1219,6 +1367,7 @@ export {
     confirmAdditionalPaymentController,
     createRentalOrder,
     decideFeeApprovalController,
+    getFeeApprovalRequestsController,
     expirePendingPaymentOrdersController,
     getRentalOrderDetailController,
     getRentalOrderHistoryController,

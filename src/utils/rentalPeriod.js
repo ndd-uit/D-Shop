@@ -2,6 +2,7 @@ const DATE_ONLY_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const RETURN_BUSINESS_START_SECONDS = 8 * 60 * 60;
 const RETURN_BUSINESS_END_SECONDS = 18 * 60 * 60;
+const PICKUP_BUSINESS_END_HOUR = 18;
 
 const getVietnamTimeOfDay = (value) => {
     const date = new Date(value);
@@ -45,6 +46,62 @@ const assertReturnWithinBusinessHours = (value) => {
     }
 
     return time.date;
+};
+
+const getPickupWindowEndAt = (rentalStartAt) => {
+    const date = new Date(rentalStartAt);
+
+    if (Number.isNaN(date.getTime())) {
+        throw new Error("INVALID_RENTAL_PERIOD");
+    }
+
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).formatToParts(date);
+    const getPart = (type) =>
+        parts.find((part) => part.type === type)?.value;
+    const vietnamDate = [
+        getPart("year"),
+        getPart("month"),
+        getPart("day"),
+    ].join("-");
+
+    return new Date(
+        `${vietnamDate}T${PICKUP_BUSINESS_END_HOUR}:00:00+07:00`
+    );
+};
+
+const assertNoShowEligible = (order, value = new Date()) => {
+    if (order.status !== "READY_FOR_PICKUP") {
+        throw new Error("INVALID_ORDER_STATUS");
+    }
+
+    if (order.actualPickupAt) {
+        throw new Error("ORDER_ALREADY_PICKED_UP");
+    }
+
+    if (
+        Number(order.collectedDepositAmount) > 0 ||
+        order.depositCollectedAt ||
+        order.depositCollectionMethod
+    ) {
+        throw new Error("DEPOSIT_ALREADY_COLLECTED");
+    }
+
+    const now = new Date(value);
+
+    if (Number.isNaN(now.getTime())) {
+        throw new Error("INVALID_NO_SHOW_TIME");
+    }
+
+    if (now <= getPickupWindowEndAt(order.rentalStartAt)) {
+        throw new Error("NO_SHOW_TOO_EARLY");
+    }
+
+    return now;
 };
 
 const parseVietnamDateAtHour = (value, hour) => {
@@ -124,7 +181,9 @@ const getReservationBlockPeriod = (
 });
 
 export {
+    assertNoShowEligible,
     assertReturnWithinBusinessHours,
+    getPickupWindowEndAt,
     getReservationBlockPeriod,
     normalizeRentalPeriod,
 };

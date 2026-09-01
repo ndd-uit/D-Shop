@@ -383,11 +383,15 @@ const recordDirectDeposit = async (
 const confirmAdditionalPaymentReceived = async (
     orderId,
     amount,
+    confirmedBy,
+    confirmedAt,
     db = prisma
 ) => db.rentalOrder.update({
     where: { orderId },
     data: {
         additionalPayment: amount,
+        additionalPaymentConfirmedBy: confirmedBy,
+        additionalPaymentConfirmedAt: confirmedAt,
         totalPaid: { increment: amount },
         netCollected: { increment: amount },
     },
@@ -619,6 +623,60 @@ const releaseReservationForReplacement = async (
     });
 };
 
+const findFeeApprovalRequests = async (
+    status = null,
+    db = prisma
+) => {
+    return db.feeApprovalRequest.findMany({
+        where: status ? { status } : undefined,
+        include: {
+            decider: {
+                select: {
+                    userId: true,
+                    fullName: true,
+                },
+            },
+            rentalOrder: {
+                select: {
+                    orderId: true,
+                    status: true,
+                    rentalStartAt: true,
+                    returnDueAt: true,
+                    actualReturnAt: true,
+                    rentalAmount: true,
+                    collectedDepositAmount: true,
+                    additionalCharge: true,
+                    customer: {
+                        select: {
+                            userId: true,
+                            fullName: true,
+                            email: true,
+                            phone: true,
+                        },
+                    },
+                    items: {
+                        select: {
+                            orderItemId: true,
+                            requestedSize: true,
+                            garment: {
+                                select: {
+                                    garmentId: true,
+                                    name: true,
+                                    imageUrls: true,
+                                },
+                            },
+                            inspectionResult: true,
+                        },
+                    },
+                },
+            },
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+    });
+};
+
 const findOrderForPreHandoverResolution = async (
     orderId,
     db = prisma
@@ -700,7 +758,24 @@ const findRentalOrders = async ({
                 customerId,
             }
             : undefined,
-        include: {
+        select: {
+            orderId: true,
+            customerId: true,
+            rentalStartAt: true,
+            returnDueAt: true,
+            status: true,
+            rentalAmount: true,
+            depositAmount: true,
+            upfrontAmount: true,
+            additionalCharge: true,
+            depositRefundAmount: true,
+            collectedDepositAmount: true,
+            additionalPayment: true,
+            finalCharge: true,
+            totalPaid: true,
+            totalRefunded: true,
+            netCollected: true,
+            createdAt: true,
             customer: {
                 select: {
                     userId: true,
@@ -710,11 +785,30 @@ const findRentalOrders = async ({
                 },
             },
             items: {
-                include: {
-                    garment: true,
+                select: {
+                    orderItemId: true,
+                    orderId: true,
+                    garmentId: true,
+                    requestedSize: true,
+                    garment: {
+                        select: {
+                            garmentId: true,
+                            categoryId: true,
+                            name: true,
+                            imageUrls: true,
+                            rentalPrice: true,
+                            depositAmount: true,
+                        },
+                    },
                     reservations: {
-                        include: {
-                            rentalUnit: true,
+                        select: {
+                            reservationId: true,
+                            rentalOrderItemId: true,
+                            rentalUnitId: true,
+                            status: true,
+                            holdExpiresAt: true,
+                            blockedStartAt: true,
+                            blockedEndAt: true,
                         },
                     },
                 },
@@ -830,6 +924,7 @@ export {
     updateRentalUnitStatus,
     markRentalUnitAsPreparing,
     findFeeApprovalRequestById,
+    findFeeApprovalRequests,
     updateFeeApprovalRequest,
     findOverdueRentalOrders,
     findExpiredPendingPaymentOrders,

@@ -19,11 +19,14 @@ import {
     policyMatchesV2,
 } from "../prisma/rental-policy-v2.js";
 import {
+    assertNoShowEligible,
     assertReturnWithinBusinessHours,
+    getPickupWindowEndAt,
     getReservationBlockPeriod,
     normalizeRentalPeriod,
 } from "../src/utils/rentalPeriod.js";
 import { calculateSettlementAmounts } from "../src/utils/settlement.js";
+import { buildManagerReport } from "../src/modules/operations/operations.service.js";
 
 const lateFeePolicy = {
     basis: "RENTAL_AMOUNT",
@@ -79,6 +82,74 @@ test("reservation uses exactly one day before and after", () => {
         block.blockedEndAt.toISOString(),
         "2026-09-06T11:00:00.000Z"
     );
+});
+
+test("NO_SHOW is allowed only after the Vietnam pickup window has ended", () => {
+    const order = {
+        status: "READY_FOR_PICKUP",
+        rentalStartAt: "2026-08-28T01:00:00.000Z",
+        actualPickupAt: null,
+        collectedDepositAmount: 0,
+        depositCollectedAt: null,
+        depositCollectionMethod: null,
+    };
+
+    assert.equal(
+        getPickupWindowEndAt(order.rentalStartAt).toISOString(),
+        "2026-08-28T11:00:00.000Z"
+    );
+    assert.throws(
+        () => assertNoShowEligible(
+            order,
+            "2026-08-28T10:59:59.000Z"
+        ),
+        /NO_SHOW_TOO_EARLY/
+    );
+    assert.throws(
+        () => assertNoShowEligible(
+            order,
+            "2026-08-28T11:00:00.000Z"
+        ),
+        /NO_SHOW_TOO_EARLY/
+    );
+    assert.doesNotThrow(() => assertNoShowEligible(
+        order,
+        "2026-08-28T11:00:00.001Z"
+    ));
+});
+
+test("NO_SHOW rejects picked-up orders and every recorded deposit marker", () => {
+    const eligibleOrder = {
+        status: "READY_FOR_PICKUP",
+        rentalStartAt: "2026-08-28T01:00:00.000Z",
+        actualPickupAt: null,
+        collectedDepositAmount: 0,
+        depositCollectedAt: null,
+        depositCollectionMethod: null,
+    };
+    const afterPickupWindow = "2026-08-28T11:00:00.001Z";
+
+    assert.throws(
+        () => assertNoShowEligible({
+            ...eligibleOrder,
+            actualPickupAt: "2026-08-28T02:00:00.000Z",
+        }, afterPickupWindow),
+        /ORDER_ALREADY_PICKED_UP/
+    );
+
+    for (const depositState of [
+        { collectedDepositAmount: 500000 },
+        { depositCollectedAt: "2026-08-28T02:00:00.000Z" },
+        { depositCollectionMethod: "DIRECT" },
+    ]) {
+        assert.throws(
+            () => assertNoShowEligible({
+                ...eligibleOrder,
+                ...depositState,
+            }, afterPickupWindow),
+            /DEPOSIT_ALREADY_COLLECTED/
+        );
+    }
 });
 
 test("rejects datetime input because customer selects dates only", () => {
@@ -422,5 +493,65 @@ test("settlement uses the collected deposit rather than the required deposit", (
             additionalPayment: 350000,
             finalCharge: 1200000,
         }
+    );
+});
+
+test("manager report keeps deposit outside rental revenue", () => {
+    const report = buildManagerReport({
+        from: "2026-08-30",
+        to: "2026-08-30",
+        rangeDays: 1,
+        orders: [
+            {
+                orderId: "00000000-0000-4000-8000-000000000001",
+                status: "COMPLETED",
+                createdAt: "2026-08-30T02:00:00.000Z",
+            },
+        ],
+        rentalPayments: [
+            { amount: 350000, paidAt: "2026-08-30T03:00:00.000Z" },
+        ],
+        additionalCharges: [
+            {
+                additionalCharge: 50000,
+                actualReturnAt: "2026-08-30T08:00:00.000Z",
+            },
+        ],
+        deposits: [{ collectedDepositAmount: 500000 }],
+        refunds: [
+            {
+                type: "DEPOSIT_RETURN",
+                amount: 450000,
+                completedAt: "2026-08-30T09:00:00.000Z",
+            },
+            {
+                type: "RENTAL_REFUND",
+                amount: 100000,
+                completedAt: "2026-08-30T10:00:00.000Z",
+            },
+        ],
+        unitGroups: [
+            { status: "AVAILABLE", _count: { rentalUnitId: 2 } },
+            { status: "MAINTENANCE", _count: { rentalUnitId: 1 } },
+            { status: "DAMAGED", _count: { rentalUnitId: 1 } },
+        ],
+        popularItems: [],
+    });
+
+    assert.deepEqual(report.overview, {
+        totalOrders: 1,
+        rentalRevenue: 350000,
+        additionalFees: 50000,
+        collectedDeposits: 500000,
+        returnedDeposits: 450000,
+        totalRefunds: 550000,
+    });
+    assert.equal(report.finance.periods[0].rentalRevenue, 350000);
+    assert.equal(report.finance.periods[0].additionalFees, 50000);
+    assert.equal(report.finance.periods[0].refunds, 550000);
+    assert.equal(report.inventory.maintenanceRepair, 2);
+    assert.equal(
+        report.orderStatus.some((item) => item.status === "CANCELLED"),
+        false
     );
 });

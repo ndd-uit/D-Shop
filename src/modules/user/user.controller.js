@@ -8,9 +8,10 @@ const getMyProfileController = async (
     res
 ) => {
     try {
-        const user = await getMyProfile(
-            req.user.userId
-        );
+        // authenticate đã đọc và kiểm tra tài khoản. Tái sử dụng kết quả
+        // để /users/me không tạo thêm một round trip tới database.
+        const user = req.authenticatedUser ??
+            await getMyProfile(req.user.userId);
 
         return res.status(200).json({
             success: true,

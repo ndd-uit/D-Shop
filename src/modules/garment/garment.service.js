@@ -139,23 +139,23 @@ const getGarments = async (query = {}) => {
         return garments;
     }
 
-    const availableGarments = [];
+    const availabilityResults = await Promise.all(
+        garments.map(async (garment) => {
+            const availability = await checkAvailability({
+                garmentId: garment.garmentId,
+                requestedSize: size ?? undefined,
+                quantity: 1,
+                rentalStartAt,
+                returnDueAt,
+            });
 
-    for (const garment of garments) {
-        const availability = await checkAvailability({
-            garmentId: garment.garmentId,
-            requestedSize: size ?? undefined,
-            quantity: 1,
-            rentalStartAt,
-            returnDueAt,
-        });
+            return availability.available
+                ? garment
+                : null;
+        })
+    );
 
-        if (availability.available) {
-            availableGarments.push(garment);
-        }
-    }
-
-    return availableGarments;
+    return availabilityResults.filter(Boolean);
 };
 
 const getGarmentById = async (garmentId) => {
@@ -682,6 +682,20 @@ const getRentalUnitsForManagement = async () => {
     return findRentalUnitsForManagement();
 };
 
+const getRentalUnitForManagement = async (
+    rentalUnitId
+) => {
+    const unit = await findRentalUnitForManagementById(
+        rentalUnitId
+    );
+
+    if (!unit) {
+        throw new Error("RENTAL_UNIT_NOT_FOUND");
+    }
+
+    return unit;
+};
+
 const createRentalUnitService = async (
     body,
     managerId
@@ -993,6 +1007,7 @@ export {
     updateGarmentService,
     updateGarmentStatusService,
     getRentalUnitsForManagement,
+    getRentalUnitForManagement,
     createRentalUnitService,
     updateRentalUnitService,
     retireRentalUnitService,

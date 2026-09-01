@@ -10,6 +10,9 @@ import {
 import validateUuid from '../../middlewares/validateUuid.js'
 import authenticate from '../../middlewares/auth.middleware.js';
 import authorizeRole from '../../middlewares/authorizeRole.js';
+import {
+    uploadGarmentImages,
+} from '../../middlewares/garmentImageUpload.js';
 
 const router = Router();
 
@@ -27,6 +30,7 @@ router.post(
     '/',
     authenticate,
     authorizeRole('STORE_MANAGER'),
+    uploadGarmentImages,
     createGarmentController
 );
 
@@ -43,6 +47,7 @@ router.patch(
     authenticate,
     authorizeRole('STORE_MANAGER'),
     validateUuid('garmentId'),
+    uploadGarmentImages,
     updateGarmentController
 );
 

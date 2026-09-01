@@ -123,14 +123,15 @@ model User {
   isActive     Boolean  @default(true) @map("is_active")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamp(6)
 
-  rentalCart            RentalCart?
-  customerOrders        RentalOrder[]              @relation("OrderCustomer")
-  inspectionResults     InspectionResult[]         @relation("InspectionInspectedBy")
-  feeApprovalDecisions  FeeApprovalRequest[]       @relation("FeeApprovalDecidedBy")
-  orderStatusChanges    RentalOrderStatusHistory[] @relation("OrderStatusChangedBy")
-  unitStatusChanges     RentalUnitStatusHistory[]  @relation("UnitStatusChangedBy")
-  replacedReservations  Reservation[]              @relation("ReservationReplacedBy")
-  createdRentalPolicies RentalPolicy[]             @relation("RentalPolicyCreatedBy")
+  rentalCart                     RentalCart?
+  customerOrders                 RentalOrder[]              @relation("OrderCustomer")
+  inspectionResults              InspectionResult[]         @relation("InspectionInspectedBy")
+  feeApprovalDecisions           FeeApprovalRequest[]       @relation("FeeApprovalDecidedBy")
+  orderStatusChanges             RentalOrderStatusHistory[] @relation("OrderStatusChangedBy")
+  unitStatusChanges              RentalUnitStatusHistory[]  @relation("UnitStatusChangedBy")
+  replacedReservations           Reservation[]              @relation("ReservationReplacedBy")
+  createdRentalPolicies          RentalPolicy[]             @relation("RentalPolicyCreatedBy")
+  additionalPaymentConfirmations RentalOrder[]              @relation("AdditionalPaymentConfirmedBy")
 
   @@map("users")
 }
@@ -243,38 +244,41 @@ model RentalCartItem {
 }
 
 model RentalOrder {
-  orderId                 String                   @id @default(uuid()) @map("order_id") @db.Uuid
-  customerId              String                   @map("customer_id") @db.Uuid
-  policyId                String                   @map("policy_id") @db.Uuid
-  rentalStartAt           DateTime                 @map("rental_start_at") @db.Timestamp(6)
-  returnDueAt             DateTime                 @map("return_due_at") @db.Timestamp(6)
-  actualPickupAt          DateTime?                @map("actual_pickup_at") @db.Timestamp(6)
-  actualReturnAt          DateTime?                @map("actual_return_at") @db.Timestamp(6)
-  pickupInfo              String?                  @map("pickup_info") @db.Text
-  returnInfo              String?                  @map("return_info") @db.Text
-  status                  RentalOrderStatus
-  rentalAmount            Decimal                  @map("rental_amount") @db.Decimal(12, 2)
-  depositAmount           Decimal                  @map("deposit_amount") @db.Decimal(12, 2)
-  upfrontAmount           Decimal                  @map("upfront_amount") @db.Decimal(12, 2)
-  additionalCharge        Decimal                  @default(0) @map("additional_charge") @db.Decimal(12, 2)
-  depositRefundAmount     Decimal                  @default(0) @map("deposit_refund_amount") @db.Decimal(12, 2)
-  collectedDepositAmount  Decimal                  @default(0) @map("collected_deposit_amount") @db.Decimal(12, 2)
-  depositCollectionMethod DepositCollectionMethod? @map("deposit_collection_method")
-  depositCollectedAt      DateTime?                @map("deposit_collected_at") @db.Timestamp(6)
-  additionalPayment       Decimal                  @default(0) @map("additional_payment") @db.Decimal(12, 2)
-  finalCharge             Decimal?                 @map("final_charge") @db.Decimal(12, 2)
-  totalPaid               Decimal                  @default(0) @map("total_paid") @db.Decimal(12, 2)
-  totalRefunded           Decimal                  @default(0) @map("total_refunded") @db.Decimal(12, 2)
-  netCollected            Decimal                  @default(0) @map("net_collected") @db.Decimal(12, 2)
-  createdAt               DateTime                 @default(now()) @map("created_at") @db.Timestamp(6)
+  orderId                      String                   @id @default(uuid()) @map("order_id") @db.Uuid
+  customerId                   String                   @map("customer_id") @db.Uuid
+  policyId                     String                   @map("policy_id") @db.Uuid
+  rentalStartAt                DateTime                 @map("rental_start_at") @db.Timestamp(6)
+  returnDueAt                  DateTime                 @map("return_due_at") @db.Timestamp(6)
+  actualPickupAt               DateTime?                @map("actual_pickup_at") @db.Timestamp(6)
+  actualReturnAt               DateTime?                @map("actual_return_at") @db.Timestamp(6)
+  pickupInfo                   String?                  @map("pickup_info") @db.Text
+  returnInfo                   String?                  @map("return_info") @db.Text
+  status                       RentalOrderStatus
+  rentalAmount                 Decimal                  @map("rental_amount") @db.Decimal(12, 2)
+  depositAmount                Decimal                  @map("deposit_amount") @db.Decimal(12, 2)
+  upfrontAmount                Decimal                  @map("upfront_amount") @db.Decimal(12, 2)
+  additionalCharge             Decimal                  @default(0) @map("additional_charge") @db.Decimal(12, 2)
+  depositRefundAmount          Decimal                  @default(0) @map("deposit_refund_amount") @db.Decimal(12, 2)
+  collectedDepositAmount       Decimal                  @default(0) @map("collected_deposit_amount") @db.Decimal(12, 2)
+  depositCollectionMethod      DepositCollectionMethod? @map("deposit_collection_method")
+  depositCollectedAt           DateTime?                @map("deposit_collected_at") @db.Timestamp(6)
+  additionalPayment            Decimal                  @default(0) @map("additional_payment") @db.Decimal(12, 2)
+  additionalPaymentConfirmedAt DateTime?                @map("additional_payment_confirmed_at") @db.Timestamp(6)
+  additionalPaymentConfirmedBy String?                  @map("additional_payment_confirmed_by") @db.Uuid
+  finalCharge                  Decimal?                 @map("final_charge") @db.Decimal(12, 2)
+  totalPaid                    Decimal                  @default(0) @map("total_paid") @db.Decimal(12, 2)
+  totalRefunded                Decimal                  @default(0) @map("total_refunded") @db.Decimal(12, 2)
+  netCollected                 Decimal                  @default(0) @map("net_collected") @db.Decimal(12, 2)
+  createdAt                    DateTime                 @default(now()) @map("created_at") @db.Timestamp(6)
 
-  customer            User                       @relation("OrderCustomer", fields: [customerId], references: [userId])
-  policy              RentalPolicy               @relation(fields: [policyId], references: [policyId])
-  items               RentalOrderItem[]
-  feeApprovalRequests FeeApprovalRequest[]
-  payments            Payment[]
-  refunds             Refund[]
-  statusHistory       RentalOrderStatusHistory[]
+  customer                   User                       @relation("OrderCustomer", fields: [customerId], references: [userId])
+  policy                     RentalPolicy               @relation(fields: [policyId], references: [policyId])
+  items                      RentalOrderItem[]
+  feeApprovalRequests        FeeApprovalRequest[]
+  payments                   Payment[]
+  refunds                    Refund[]
+  statusHistory              RentalOrderStatusHistory[]
+  additionalPaymentConfirmer User?                      @relation("AdditionalPaymentConfirmedBy", fields: [additionalPaymentConfirmedBy], references: [userId], onDelete: SetNull)
 
   @@map("rental_orders")
 }

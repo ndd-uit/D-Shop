@@ -42,7 +42,7 @@ app.use('/api/operations', operationsRoutes)
 app.get('/api/health', (req, res) => {
     res.json({
         success: true,
-        message: 'API ATTIRA đang hoạt động',
+        message: 'API D Shop đang hoạt động',
     })
 })
 
@@ -66,7 +66,6 @@ app.get('/api/health/db', async (req, res) => {
 
 // Khởi động server
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
-    startExpireTemporaryHoldsJob();
-});
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`)
+})

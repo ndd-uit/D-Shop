@@ -7,6 +7,7 @@ import {
     getRefunds,
     processPaymentFailed,
     processPaymentSucceeded,
+    processSePayPaymentIpn,
     processRefundFailed,
     processRefundSucceeded,
     retryFailedRefund,
@@ -31,6 +32,14 @@ const errorStatus = new Map([
     ["TRANSACTION_REF_CONFLICT", 409],
     ["TRANSACTION_CONFLICT", 409],
     ["GATEWAY_REQUEST_FAILED", 502],
+    ["SEPAY_WEBHOOK_UNAUTHORIZED", 401],
+    ["SEPAY_WEBHOOK_INVALID", 400],
+    ["SEPAY_REFERENCE_INVALID", 400],
+    ["SEPAY_CURRENCY_MISMATCH", 422],
+    ["SEPAY_AMOUNT_MISMATCH", 422],
+    ["SEPAY_PURPOSE_MISMATCH", 422],
+    ["SEPAY_INVALID_AMOUNT", 422],
+    ["PAYMENT_CALLBACK_DISABLED", 409],
 ]);
 
 const errorMessages = new Map([
@@ -52,7 +61,25 @@ const errorMessages = new Map([
     ["TRANSACTION_REF_CONFLICT", "Mã giao dịch đã được sử dụng"],
     ["TRANSACTION_CONFLICT", "Xung đột giao dịch, vui lòng thử lại"],
     ["GATEWAY_REQUEST_FAILED", "Không thể kết nối cổng thanh toán"],
+    ["SEPAY_WEBHOOK_UNAUTHORIZED", "Webhook SePay không được xác thực"],
+    ["SEPAY_WEBHOOK_INVALID", "Dữ liệu webhook SePay không hợp lệ"],
+    ["SEPAY_REFERENCE_INVALID", "Mã tham chiếu SePay không hợp lệ"],
+    ["SEPAY_CURRENCY_MISMATCH", "Loại tiền webhook không khớp"],
+    ["SEPAY_AMOUNT_MISMATCH", "Số tiền webhook không khớp"],
+    ["SEPAY_PURPOSE_MISMATCH", "Mục đích thanh toán không khớp"],
+    ["SEPAY_INVALID_AMOUNT", "Số tiền SePay không hợp lệ"],
+    ["PAYMENT_CALLBACK_DISABLED", "Thanh toán SePay chỉ được xử lý qua IPN đã xác thực"],
 ]);
+
+const assertManualPaymentCallbackAllowed = () => {
+    if (
+        (process.env.PAYMENT_GATEWAY || "MOCK")
+            .trim()
+            .toUpperCase() === "SEPAY"
+    ) {
+        throw new Error("PAYMENT_CALLBACK_DISABLED");
+    }
+};
 
 const respondError = (error, res) => {
     const status = errorStatus.get(error.message) ?? 500;
@@ -94,6 +121,7 @@ const createDepositPaymentController = async (req, res) => {
 
 const paymentSucceededController = async (req, res) => {
     try {
+        assertManualPaymentCallbackAllowed();
         const data = await processPaymentSucceeded(
             req.body?.paymentId,
             req.body?.transactionRef
@@ -106,10 +134,24 @@ const paymentSucceededController = async (req, res) => {
 
 const paymentFailedController = async (req, res) => {
     try {
+        assertManualPaymentCallbackAllowed();
         const data = await processPaymentFailed(
             req.body?.paymentId,
             req.body?.transactionRef
         );
+        return res.status(200).json({ success: true, data });
+    } catch (error) {
+        return respondError(error, res);
+    }
+};
+
+const sePayPaymentIpnController = async (req, res) => {
+    try {
+        const data = await processSePayPaymentIpn(
+            req.body,
+            req.get("X-Secret-Key")
+        );
+
         return res.status(200).json({ success: true, data });
     } catch (error) {
         return respondError(error, res);
@@ -206,4 +248,5 @@ export {
     refundFailedController,
     refundSucceededController,
     retryFailedRefundController,
+    sePayPaymentIpnController,
 };

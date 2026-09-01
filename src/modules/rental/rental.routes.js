@@ -2,10 +2,12 @@ import { Router } from "express";
 import authenticate from "../../middlewares/auth.middleware.js";
 import authorizeRole from "../../middlewares/authorizeRole.js";
 import validateUuid from "../../middlewares/validateUuid.js";
+import { uploadRentalEvidenceImages } from "../../middlewares/rentalEvidenceUpload.js";
 import {
     confirmAdditionalPaymentController,
     createRentalOrder,
     decideFeeApprovalController,
+    getFeeApprovalRequestsController,
     expirePendingPaymentOrdersController,
     getRentalOrderDetailController,
     getRentalOrderHistoryController,
@@ -54,6 +56,13 @@ router.patch(
     updateRentalUnitStatusController
 );
 
+router.get(
+    "/fee-approvals",
+    authenticate,
+    authorizeRole("STORE_MANAGER"),
+    getFeeApprovalRequestsController
+);
+
 router.patch(
     "/fee-approvals/:feeApprovalRequestId/decision",
     authenticate,
@@ -76,6 +85,7 @@ router.patch(
     staffOnly,
     validateUuid("orderId"),
     validateUuid("reservationId"),
+    uploadRentalEvidenceImages,
     prepareRentalReservation
 );
 
@@ -107,7 +117,7 @@ router.patch(
 router.patch(
     "/:id/reservations/:reservationId/fulfillment-failed",
     authenticate,
-    operationsRoles,
+    staffOnly,
     validateUuid("id"),
     validateUuid("reservationId"),
     markFulfillmentFailedController
@@ -127,6 +137,7 @@ router.post(
     staffOnly,
     validateUuid("id"),
     validateUuid("itemId"),
+    uploadRentalEvidenceImages,
     inspectOrderItem
 );
 

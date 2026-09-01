@@ -78,6 +78,8 @@ const createRentalPolicyVersionController = async (
             error.message === "POLICY_VERSION_REQUIRED" ||
             error.message === "INVALID_EFFECTIVE_FROM" ||
             error.message ===
+                "POLICY_EFFECTIVE_FROM_MUST_BE_FUTURE" ||
+            error.message ===
                 "INVALID_POLICY_NUMERIC_FIELDS" ||
             error.message === "INVALID_LATE_FEE_POLICY"
         ) {
@@ -86,6 +88,8 @@ const createRentalPolicyVersionController = async (
                     "Cần cung cấp phiên bản chính sách",
                 INVALID_EFFECTIVE_FROM:
                     "Thời điểm bắt đầu hiệu lực không hợp lệ",
+                POLICY_EFFECTIVE_FROM_MUST_BE_FUTURE:
+                    "Thời điểm hiệu lực phải ở tương lai",
                 INVALID_POLICY_NUMERIC_FIELDS:
                     "Các giá trị số của chính sách không hợp lệ",
                 INVALID_LATE_FEE_POLICY:
@@ -100,11 +104,20 @@ const createRentalPolicyVersionController = async (
 
         if (
             error.message ===
-            "POLICY_VERSION_ALREADY_EXISTS"
+                "POLICY_VERSION_ALREADY_EXISTS" ||
+            error.message ===
+                "POLICY_EFFECTIVE_FROM_ALREADY_EXISTS" ||
+            error.message ===
+                "POLICY_VERSION_CONFLICT"
         ) {
             return res.status(409).json({
                 success: false,
-                message: "Phiên bản chính sách đã tồn tại",
+                message: error.message ===
+                    "POLICY_EFFECTIVE_FROM_ALREADY_EXISTS"
+                    ? "Đã có chính sách bắt đầu tại thời điểm này"
+                    : error.message === "POLICY_VERSION_CONFLICT"
+                        ? "Có xung đột khi tạo phiên bản chính sách"
+                        : "Phiên bản chính sách đã tồn tại",
             });
         }
 

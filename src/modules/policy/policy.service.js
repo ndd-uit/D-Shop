@@ -3,7 +3,11 @@ import { findActiveRentalPolicy } from "../availability/availability.repository.
 import {
     createRentalPolicy,
     findAllRentalPolicies,
+    findNextRentalPolicy,
+    findPreviousRentalPolicy,
+    findRentalPolicyByEffectiveFrom,
     findRentalPolicyByVersion,
+    updateRentalPolicyEffectiveTo,
 } from "./policy.repository.js";
 import { validateLateFeePolicy } from "./policy.validator.js";
 
@@ -100,6 +104,12 @@ const createRentalPolicyVersion = async ({
         throw new Error("INVALID_EFFECTIVE_FROM");
     }
 
+    if (startAt <= new Date()) {
+        throw new Error(
+            "POLICY_EFFECTIVE_FROM_MUST_BE_FUTURE"
+        );
+    }
+
     try {
         return await prisma.$transaction(
             async (tx) => {
@@ -115,6 +125,19 @@ const createRentalPolicyVersion = async ({
                     );
                 }
 
+
+                const effectiveFromConflict =
+                    await findRentalPolicyByEffectiveFrom(
+                        startAt,
+                        tx
+                    );
+
+                if (effectiveFromConflict) {
+                    throw new Error(
+                        "POLICY_EFFECTIVE_FROM_ALREADY_EXISTS"
+                    );
+                }
+
                 const current =
                     await findActiveRentalPolicy(
                         new Date(),
@@ -127,30 +150,38 @@ const createRentalPolicyVersion = async ({
                     );
                 }
 
+                const [previousPolicy, nextPolicy] =
+                    await Promise.all([
+                        findPreviousRentalPolicy(startAt, tx),
+                        findNextRentalPolicy(startAt, tx),
+                    ]);
+                const sourcePolicy =
+                    previousPolicy ?? current;
                 const finalLateFeePolicy =
                     lateFeePolicy ??
-                    current.lateFeePolicy;
+                    sourcePolicy.lateFeePolicy;
 
                 const finalHoldDuration =
                     normalizeNonNegativeInteger(
                         holdDuration ??
-                        current.holdDuration
+                        sourcePolicy.holdDuration
                     );
                 const finalApprovalThreshold =
                     normalizeNonNegativeNumber(
                         approvalThreshold ??
-                        current.approvalThreshold
+                        sourcePolicy.approvalThreshold
                     );
 
                 validateLateFeePolicy(
                     finalLateFeePolicy
                 );
 
-                return createRentalPolicy(
+                const policy = await createRentalPolicy(
                     {
                         version: normalizedVersion,
                         effectiveFrom: startAt,
-                        effectiveTo: null,
+                        effectiveTo:
+                            nextPolicy?.effectiveFrom ?? null,
                         holdDuration:
                             finalHoldDuration,
                         approvalThreshold:
@@ -159,12 +190,22 @@ const createRentalPolicyVersion = async ({
                             finalLateFeePolicy,
                         damageFeePolicy:
                             damageFeePolicy ??
-                            current.damageFeePolicy,
+                            sourcePolicy.damageFeePolicy,
                         createdBy: managerId,
                         createdAt: new Date(),
                     },
                     tx
                 );
+
+                if (previousPolicy) {
+                    await updateRentalPolicyEffectiveTo(
+                        previousPolicy.policyId,
+                        startAt,
+                        tx
+                    );
+                }
+
+                return policy;
             },
             {
                 isolationLevel: "Serializable",
@@ -178,6 +219,12 @@ const createRentalPolicyVersion = async ({
         ) {
             throw new Error(
                 "POLICY_VERSION_ALREADY_EXISTS"
+            );
+        }
+
+        if (error?.code === "P2034") {
+            throw new Error(
+                "POLICY_VERSION_CONFLICT"
             );
         }
 

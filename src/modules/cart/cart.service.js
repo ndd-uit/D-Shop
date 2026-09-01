@@ -1,12 +1,30 @@
-import { updateRentalPeriod, deleteCartItem, findCartItemById, findCartByCustomerId, createCart, findCartItem, createCartItem, updateCartItemQuantity } from "./cart.repository.js";
+import { updateRentalPeriod, deleteCartItem, deleteCartItems, findCartItemById, findCartByCustomerId, createCart, findCartItem, createCartItem, updateCartItemQuantity } from "./cart.repository.js";
 import { getGarmentById } from "../garment/garment.service.js";
 import { checkAvailability } from "../availability/availability.service.js";
 import { validateUuidValue } from "../../utils/validation.js";
 import { normalizeRentalPeriod } from "../../utils/rentalPeriod.js";
 // Lay cart cua customer: chi tim --> k co --> null
-const getCart = async (customerId) => {
-    return findCartByCustomerId(customerId)
+const getCart = async (customerId, db) => {
+    return findCartByCustomerId(customerId, db)
 }
+
+const removeCheckedOutCartItems = async (
+    cartId,
+    cartItemIds,
+    db
+) => {
+    const result = await deleteCartItems(
+        cartId,
+        cartItemIds,
+        db
+    );
+
+    if (result.count !== cartItemIds.length) {
+        throw new Error("CART_ITEMS_CHANGED");
+    }
+
+    return result;
+};
 
 // Tao cart neu chua co: tim --> k co --> tao moi
 const getOrCreateCart = async (customerId) => {
@@ -148,19 +166,27 @@ const updateCartRentalPeriod = async (customerId, rentalStartAt, returnDueAt) =>
         returnDueAt
     );
     // Check tat ca item trong cart co du RentalUnit kha dung khong, tat ca hop le --> update thoi gian
-    for (const item of cart.items) {
-        const result = await checkAvailability({
+    const availabilityResults = await Promise.all(
+        cart.items.map((item) => checkAvailability({
             garmentId: item.garmentId,
             requestedSize: item.requestedSize,
             quantity: item.quantity,
             rentalStartAt: start,
             returnDueAt: end,
-        });
-        if (!result.available) {
-            throw new Error('INSUFFICIENT_AVAILABILITY');
-        }
+        }))
+    );
+
+    if (availabilityResults.some((result) => !result.available)) {
+        throw new Error('INSUFFICIENT_AVAILABILITY');
     }
     return updateRentalPeriod(cart.cartId, start, end);
 };
 
-export { getCart, addItemToCart, updateItemQuantity, removeCartItem, updateCartRentalPeriod };
+export {
+    getCart,
+    addItemToCart,
+    removeCheckedOutCartItems,
+    updateItemQuantity,
+    removeCartItem,
+    updateCartRentalPeriod,
+};

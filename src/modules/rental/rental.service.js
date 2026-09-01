@@ -1,5 +1,8 @@
 import prisma from "../../config/prisma.js";
-import { getCart } from "../cart/cart.service.js"
+import {
+    getCart,
+    removeCheckedOutCartItems,
+} from "../cart/cart.service.js"
 import { checkAvailability } from "../availability/availability.service.js"
 import {
     findRentalOrderForPreparation,
@@ -34,6 +37,7 @@ import {
     markRentalUnitAsPreparing,
     updateFeeApprovalRequest,
     findFeeApprovalRequestById,
+    findFeeApprovalRequests,
     findOverdueRentalOrders,
     findExpiredPendingPaymentOrders,
     expireTemporaryReservations,
@@ -56,12 +60,15 @@ import {
     RefundType,
     RefundStatus,
     DepositCollectionMethod,
+    PaymentPurpose,
+    PaymentStatus,
     UserRole,
 } from "../../generated/prisma/client.ts";
 import { findActiveRentalPolicy, findAvailableRentalUnits } from "../availability/availability.repository.js";
 import {
     createRefund,
     findLatestRefundByOrderAndType,
+    findPaymentByPurposeAndStatus,
     findSuccessfulRentalPayment,
 } from "../payment/payment.repository.js";
 import {
@@ -69,7 +76,29 @@ import {
 } from "../payment/gateway/paymentGateway.js";
 import { UUID_REGEX } from "../../utils/validation.js";
 import { calculateSettlementAmounts } from "../../utils/settlement.js";
-import { assertReturnWithinBusinessHours } from "../../utils/rentalPeriod.js";
+import {
+    assertNoShowEligible,
+    assertReturnWithinBusinessHours,
+} from "../../utils/rentalPeriod.js";
+
+const RENTAL_UNIT_STATUS_TRANSITIONS = {
+    AVAILABLE: [
+        RentalUnitStatus.MAINTENANCE,
+        RentalUnitStatus.DAMAGED,
+    ],
+    PREPARING: [
+        RentalUnitStatus.MAINTENANCE,
+        RentalUnitStatus.DAMAGED,
+    ],
+    RETURN_INSPECTION: [
+        RentalUnitStatus.CLEANING,
+        RentalUnitStatus.MAINTENANCE,
+        RentalUnitStatus.DAMAGED,
+    ],
+    DAMAGED: [RentalUnitStatus.MAINTENANCE],
+    CLEANING: [RentalUnitStatus.AVAILABLE],
+    MAINTENANCE: [RentalUnitStatus.AVAILABLE],
+};
 
 const attachAutomaticRefundGatewayRequest = async (
     result,
@@ -187,12 +216,23 @@ const ensureAutomaticRefund = async ({
         return null;
     }
 
-    const payment = paymentId
-        ? { paymentId }
-        : await findSuccessfulRentalPayment(
+    let payment = null;
+
+    if (type === RefundType.DEPOSIT_RETURN) {
+        payment = await findPaymentByPurposeAndStatus(
             orderId,
+            PaymentPurpose.DEPOSIT,
+            PaymentStatus.SUCCEEDED,
             db
         );
+    } else if (type === RefundType.RENTAL_REFUND) {
+        payment = paymentId
+            ? { paymentId }
+            : await findSuccessfulRentalPayment(
+                orderId,
+                db
+            );
+    }
 
     if (
         !payment &&
@@ -257,7 +297,59 @@ const buildRentalOrderCreateData = ({
     upfrontAmount: rentalAmount,
 });
 
-const createRental = async (customerId, pickupInfo, returnInfo) => {
+const normalizeSelectedCartItemIds = (selectedCartItemIds) => {
+    if (
+        !Array.isArray(selectedCartItemIds) ||
+        selectedCartItemIds.length === 0
+    ) {
+        throw new Error("SELECTED_CART_ITEMS_REQUIRED");
+    }
+
+    if (
+        selectedCartItemIds.some(
+            (cartItemId) =>
+                typeof cartItemId !== "string" ||
+                !UUID_REGEX.test(cartItemId)
+        )
+    ) {
+        throw new Error("INVALID_CART_ITEM_ID");
+    }
+
+    if (
+        new Set(selectedCartItemIds).size !==
+        selectedCartItemIds.length
+    ) {
+        throw new Error("DUPLICATE_CART_ITEM_IDS");
+    }
+
+    return selectedCartItemIds;
+};
+
+const selectCartItemsForCheckout = (
+    cart,
+    selectedCartItemIds
+) => {
+    const itemsById = new Map(
+        cart.items.map((item) => [item.cartItemId, item])
+    );
+    const selectedItems = selectedCartItemIds.map(
+        (cartItemId) => itemsById.get(cartItemId)
+    );
+
+    if (selectedItems.some((item) => !item)) {
+        throw new Error("CART_ITEM_NOT_FOUND");
+    }
+
+    return selectedItems;
+};
+
+const createRental = async (
+    customerId,
+    pickupInfo,
+    returnInfo,
+    selectedCartItemIds,
+    db = prisma
+) => {
     const normalizedPickupInfo = normalizeRequiredString(
         pickupInfo,
         "RENTAL_INFO_REQUIRED"
@@ -266,30 +358,36 @@ const createRental = async (customerId, pickupInfo, returnInfo) => {
         returnInfo,
         "RENTAL_INFO_REQUIRED"
     );
-
-    const cart = await getCart(customerId);
-
-    if (!cart) {
-        throw new Error("CART_NOT_FOUND");
-    }
-
-    if (cart.items.length === 0) {
-        throw new Error("CART_EMPTY");
-    }
-
-    if (!cart.rentalStartAt || !cart.returnDueAt) {
-        throw new Error("RENTAL_PERIOD_REQUIRED");
-    }
+    const normalizedCartItemIds =
+        normalizeSelectedCartItemIds(selectedCartItemIds);
     // Kiểm tra thong tin nhận và trả hàng
     try {
-        return prisma.$transaction(async (tx) => {
+        return db.$transaction(async (tx) => {
+            const cart = await getCart(customerId, tx);
+
+            if (!cart) {
+                throw new Error("CART_NOT_FOUND");
+            }
+
+            if (cart.items.length === 0) {
+                throw new Error("CART_EMPTY");
+            }
+
+            if (!cart.rentalStartAt || !cart.returnDueAt) {
+                throw new Error("RENTAL_PERIOD_REQUIRED");
+            }
+
+            const selectedItems = selectCartItemsForCheckout(
+                cart,
+                normalizedCartItemIds
+            );
             const allocations = []; // Mảng để lưu trữ thông tin về các đơn vị cho thuê được phân bổ cho từng mục trong giỏ hàng
 
             let rentalAmount = 0; // Biến để tính tổng số tiền thuê
             let depositAmount = 0; // Biến để tính tổng số tiền thuê và tiền đặt cọc
             let policy = null; // Biến để lưu trữ chính sách thuê hiện tại
 
-            for (const item of cart.items) {
+            for (const item of selectedItems) {
                 // Kiểm tra tính khả dụng của các đơn vị cho thuê cho từng mục trong giỏ hàng
                 const availability = await checkAvailability({
                     garmentId: item.garmentId,
@@ -361,6 +459,13 @@ const createRental = async (customerId, pickupInfo, returnInfo) => {
                 changedBy: customerId,
                 reason: "Rental order created",
             }, tx)
+
+            await removeCheckedOutCartItems(
+                cart.cartId,
+                normalizedCartItemIds,
+                tx
+            );
+
             return { order, holdExpiresAt: holdExpireAt };
         }, {
             isolationLevel: "Serializable", // để giảm race condition khi 2 customer cùng giành một RentalUnit
@@ -1651,38 +1756,10 @@ const changeRentalUnitStatus = async (
             throw new Error("RENTAL_UNIT_NOT_FOUND");
         }
 
-        const allowedTransitions = {
-            AVAILABLE: [
-                RentalUnitStatus.MAINTENANCE,
-                RentalUnitStatus.DAMAGED,
-            ],
-
-            PREPARING: [
-                RentalUnitStatus.MAINTENANCE,
-                RentalUnitStatus.DAMAGED,
-            ],
-
-            RETURN_INSPECTION: [
-                RentalUnitStatus.CLEANING,
-                RentalUnitStatus.MAINTENANCE,
-                RentalUnitStatus.DAMAGED,
-            ],
-
-            DAMAGED: [
-                RentalUnitStatus.MAINTENANCE,
-            ],
-
-            CLEANING: [
-                RentalUnitStatus.AVAILABLE,
-            ],
-
-            MAINTENANCE: [
-                RentalUnitStatus.AVAILABLE,
-            ],
-        };
-
         const allowed =
-            allowedTransitions[rentalUnit.status] ?? [];
+            RENTAL_UNIT_STATUS_TRANSITIONS[
+                rentalUnit.status
+            ] ?? [];
 
         if (!allowed.includes(newStatus)) {
             throw new Error("INVALID_STATUS_TRANSITION");
@@ -1861,6 +1938,17 @@ const decideFeeApproval = async (
     );
 
     return response;
+};
+
+const getFeeApprovalRequests = async (status = null) => {
+    if (
+        status &&
+        !Object.values(FeeApprovalStatus).includes(status)
+    ) {
+        throw new Error("INVALID_FEE_APPROVAL_STATUS");
+    }
+
+    return findFeeApprovalRequests(status);
 };
 
 // Đánh dấu các đơn thuê quá hạn
@@ -2288,18 +2376,7 @@ const markRentalOrderNoShow = async (
         throw new Error("ORDER_NOT_FOUND");
     }
 
-    if (
-        order.status !==
-        RentalOrderStatus.READY_FOR_PICKUP
-    ) {
-        throw new Error("INVALID_ORDER_STATUS");
-    }
-
-    if (Number(order.collectedDepositAmount) > 0) {
-        throw new Error("DEPOSIT_ALREADY_COLLECTED");
-    }
-
-    const now = new Date();
+    const now = assertNoShowEligible(order);
     const itemIds = order.items.map(
         (item) => item.orderItemId
     );
@@ -2556,10 +2633,13 @@ const confirmAdditionalPayment = async (
             return { order, alreadyConfirmed: true };
         }
 
+        const confirmedAt = new Date();
         const updatedOrder =
             await confirmAdditionalPaymentReceived(
                 orderId,
                 requiredAmount,
+                staffId,
+                confirmedAt,
                 tx
             );
 
@@ -2567,6 +2647,7 @@ const confirmAdditionalPayment = async (
             order: updatedOrder,
             alreadyConfirmed: false,
             confirmedBy: staffId,
+            confirmedAt,
         };
     });
 
@@ -2644,8 +2725,12 @@ export {
     completeReturnedReservationBlocks,
     confirmAdditionalPayment,
     createRental,
+    normalizeSelectedCartItemIds,
+    selectCartItemsForCheckout,
     decideFeeApproval,
+    getFeeApprovalRequests,
     expirePendingPaymentOrders,
+    ensureAutomaticRefund,
     getRentalOrderDetail,
     getRentalOrderHistory,
     getRentalOrders,
@@ -2655,6 +2740,7 @@ export {
     markRentalOrderFulfillmentFailed,
     markRentalOrderNoShow,
     prepareReservation,
+    RENTAL_UNIT_STATUS_TRANSITIONS,
     receiveRentalReturn,
     replaceRentalUnit,
     settleRentalOrder,
