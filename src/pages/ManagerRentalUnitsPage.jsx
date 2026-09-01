@@ -12,7 +12,7 @@ import RetireRentalUnitModal from "../components/manager/RetireRentalUnitModal.j
 import { clearAuthToken, getAuthUser, saveAuthUser } from "../services/authStorage.js"
 import { getManagedGarments } from "../services/garmentApi.js"
 import { changeRentalUnitStatus } from "../services/rentalApi.js"
-import { createRentalUnit, getManagedRentalUnits, retireRentalUnit, updateRentalUnit } from "../services/rentalUnitApi.js"
+import { createRentalUnit, getManagedRentalUnit, getManagedRentalUnits, retireRentalUnit, updateRentalUnit } from "../services/rentalUnitApi.js"
 import { getMyProfile } from "../services/userApi.js"
 
 const STATUS_LABEL = {
@@ -59,6 +59,7 @@ function ManagerRentalUnitsPage() {
     const [formOpen, setFormOpen] = useState(false)
     const [editingUnit, setEditingUnit] = useState(undefined)
     const [detailUnit, setDetailUnit] = useState(null)
+    const [detailLoadingId, setDetailLoadingId] = useState("")
     const [saving, setSaving] = useState(false)
     const [formError, setFormError] = useState("")
     const [retiringUnit, setRetiringUnit] = useState(null)
@@ -126,7 +127,17 @@ function ManagerRentalUnitsPage() {
 
     const openCreate = () => { setEditingUnit(null); setFormError(""); setFormOpen(true) }
     const openEdit = (unit) => { setDetailUnit(null); setEditingUnit(unit); setFormError(""); setFormOpen(true) }
-    const openDetail = (unit) => { setDetailUnit(unit) }
+    const openDetail = async (unit) => {
+        setDetailLoadingId(unit.rentalUnitId)
+        setError("")
+        try {
+            setDetailUnit(await getManagedRentalUnit(unit.rentalUnitId))
+        } catch (requestError) {
+            setError(requestError.response?.data?.message || "Không thể tải chi tiết RentalUnit.")
+        } finally {
+            setDetailLoadingId("")
+        }
+    }
     const closeForm = () => { if (!saving) { setFormOpen(false); setEditingUnit(undefined) } }
 
     const saveUnit = async (payload) => {
@@ -170,7 +181,7 @@ function ManagerRentalUnitsPage() {
             const updated = await changeRentalUnitStatus(unit.rentalUnitId, newStatus, reason)
             const merged = { ...unit, ...updated }
             setUnits((current) => current.map((item) => item.rentalUnitId === unit.rentalUnitId ? merged : item))
-            setDetailUnit(merged)
+            setDetailUnit(await getManagedRentalUnit(unit.rentalUnitId))
         } finally {
             setStatusChanging(false)
         }
@@ -311,11 +322,11 @@ function ManagerRentalUnitsPage() {
                                                 <td className="px-6 py-3 text-xs text-[#897d77]">{formatDate(unit.createdAt)}</td>
                                                 <td className="px-6 py-3">
                                                     <div className="flex items-center justify-end gap-2">
-                                                        <button type="button" onClick={() => openDetail(unit)}
+                                                        <button type="button" onClick={() => openDetail(unit)} disabled={detailLoadingId === unit.rentalUnitId}
                                                             className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#e1d6cf] text-[#665b55] transition hover:border-[#cdbfb6] hover:bg-[#faf6ef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2a39b]/40"
                                                             aria-label="Xem chi tiết RentalUnit"
                                                             title="Chi tiết">
-                                                            <Eye size={16} />
+                                                            {detailLoadingId === unit.rentalUnitId ? <LoaderCircle size={16} className="animate-spin" /> : <Eye size={16} />}
                                                         </button>
                                                         <button type="button" onClick={() => openEdit(unit)}
                                                             className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg border border-[#e1d6cf] text-[#665b55] transition hover:border-[#cdbfb6] hover:bg-[#faf6ef] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2a39b]/40"

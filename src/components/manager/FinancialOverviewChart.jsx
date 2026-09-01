@@ -1,6 +1,7 @@
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import CustomSelect from "../common/CustomSelect.jsx"
 import { formatCurrency } from "../rental/rentalOrderUtils.js"
+import CompactChartLegend from "./CompactChartLegend.jsx"
 
 const options = [
     ["day", "1 ngày"],
@@ -126,9 +127,7 @@ function FinancialOverviewChart({
                             formatter={(value, name) => [formatCurrency(value), name]}
                             cursor={{ fill: "#faf6ef" }}
                         />
-                        <Legend
-                            wrapperStyle={{ fontSize: 11, color: "#766b66" }}
-                        />
+                        <Legend content={<CompactChartLegend />} height={30} />
                         <Bar name="Tiền thu" dataKey="collected" fill="#f2a39b" radius={[4, 4, 0, 0]} />
                         <Bar name="Hoàn tiền" dataKey="refunded" fill="#857371" radius={[4, 4, 0, 0]} />
                         <Bar name="Thực thu" dataKey="net" fill="#8b4d47" radius={[4, 4, 0, 0]} />

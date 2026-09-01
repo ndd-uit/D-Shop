@@ -1,4 +1,4 @@
-import { Archive, LoaderCircle, Pencil, RefreshCw, X } from "lucide-react"
+import { Archive, Clock3, LoaderCircle, Pencil, RefreshCw, X } from "lucide-react"
 import { useMemo, useState } from "react"
 
 const STATUS_LABEL = {
@@ -37,6 +37,17 @@ function Field({ label, value }) {
     return <div><p className="text-[10px] font-bold uppercase tracking-wide text-[#897d77]">{label}</p><p className="mt-1 text-sm font-medium">{value || "-"}</p></div>
 }
 
+const formatDateTime = (value) => value
+    ? new Intl.DateTimeFormat("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    }).format(new Date(value))
+    : "-"
+
 function RentalUnitDetailDrawer({ unit, statusChanging, onStatusChange, onClose, onEdit, onRetire }) {
     const transitionOptions = useMemo(() => STATUS_TRANSITIONS[unit?.status] ?? [], [unit?.status])
     const [newStatus, setNewStatus] = useState("")
@@ -46,16 +57,8 @@ function RentalUnitDetailDrawer({ unit, statusChanging, onStatusChange, onClose,
     const status = unit.status || "AVAILABLE"
     const statusLabel = STATUS_LABEL[status] || status
     const statusStyle = STATUS_STYLE[status] || "border-[#e1d6cf] bg-[#faf6ef] text-[#453c38]"
-    const createdAt = unit.createdAt
-        ? new Intl.DateTimeFormat("vi-VN", {
-            timeZone: "Asia/Ho_Chi_Minh",
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-        }).format(new Date(unit.createdAt))
-        : "-"
+    const createdAt = formatDateTime(unit.createdAt)
+    const statusHistory = Array.isArray(unit.statusHistory) ? unit.statusHistory : []
 
     const submitStatus = async (event) => {
         event.preventDefault()
@@ -79,6 +82,11 @@ function RentalUnitDetailDrawer({ unit, statusChanging, onStatusChange, onClose,
                 <div className="space-y-4"><p className="text-[10px] font-bold uppercase tracking-widest text-[#897d77]">Thông tin trang phục</p><Field label="Tên trang phục" value={unit.garment?.name} /><Field label="Danh mục" value={unit.garment?.category?.name} /></div>
                 <div className="h-px bg-[#eadfd6]" />
                 <div className="space-y-4"><p className="text-[10px] font-bold uppercase tracking-widest text-[#897d77]">Thông tin RentalUnit</p><Field label="Mã tài sản" value={unit.assetCode} /><Field label="Kích thước" value={unit.size} /><Field label="Tình trạng" value={unit.condition || "Chưa cập nhật"} /><Field label="Ngày tạo" value={createdAt} /></div>
+                <div className="h-px bg-[#eadfd6]" />
+                <section>
+                    <div className="flex items-center gap-2"><Clock3 size={15} className="text-[#b65e56]" /><p className="text-[10px] font-bold uppercase tracking-widest text-[#897d77]">Lịch sử trạng thái</p></div>
+                    {statusHistory.length > 0 ? <ol className="mt-4 space-y-4 border-l border-[#e1d6cf] pl-4">{statusHistory.map((entry) => <li key={entry.historyId} className="relative"><span className="absolute -left-[21px] top-1.5 size-2.5 rounded-full border-2 border-[#fffdf9] bg-[#d77b72]" /><p className="text-sm font-semibold">{entry.oldStatus ? `${STATUS_LABEL[entry.oldStatus] || entry.oldStatus} → ` : ""}{STATUS_LABEL[entry.newStatus] || entry.newStatus}</p><p className="mt-1 text-xs text-[#897d77]">{formatDateTime(entry.changedAt)} · {entry.changedByUser?.fullName || "Hệ thống"}</p>{entry.reason && <p className="mt-1 text-xs leading-5 text-[#665b55]">{entry.reason}</p>}</li>)}</ol> : <p className="mt-3 rounded-xl bg-[#faf6ef] p-3 text-xs text-[#897d77]">Chưa có lần chuyển trạng thái nào được ghi nhận.</p>}
+                </section>
                 {transitionOptions.length > 0 && <><div className="h-px bg-[#eadfd6]" /><form onSubmit={submitStatus} className="space-y-3"><div><p className="text-[10px] font-bold uppercase tracking-widest text-[#897d77]">Chuyển trạng thái vận hành</p><p className="mt-1 text-xs leading-5 text-[#897d77]">Chỉ hiển thị transition backend cho phép. RETIRED không thể khôi phục.</p></div><select value={newStatus} onChange={(event) => setNewStatus(event.target.value)} className="min-h-11 w-full rounded-xl border border-[#e1d6cf] bg-[#faf6ef] px-3 text-sm outline-none focus:border-[#f2a39b]"><option value="">Chọn trạng thái tiếp theo</option>{transitionOptions.map((value) => <option key={value} value={value}>{STATUS_LABEL[value]}</option>)}</select><textarea rows="2" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Lý do thay đổi trạng thái" className="w-full rounded-xl border border-[#e1d6cf] bg-[#faf6ef] p-3 text-sm outline-none focus:border-[#f2a39b]" />{statusError && <p role="alert" className="text-xs text-red-600">{statusError}</p>}<button type="submit" disabled={statusChanging || !newStatus || !reason.trim()} className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#f2a39b] px-4 text-sm font-semibold disabled:opacity-50">{statusChanging ? <LoaderCircle size={16} className="animate-spin" /> : <RefreshCw size={16} />}Cập nhật trạng thái</button></form></>}
             </div>
             <footer className="flex shrink-0 gap-3 border-t border-[#eadfd6] px-5 py-4"><button type="button" onClick={() => onEdit(unit)} className="inline-flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#e1d6cf] px-4 py-2.5 text-sm font-semibold hover:bg-[#faf6ef]"><Pencil size={16} />Chỉnh sửa</button>{RETIRABLE_STATUSES.has(status) && <button type="button" onClick={() => onRetire(unit)} className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#e6beb9] px-4 py-2.5 text-sm font-semibold text-[#9b4d47] hover:bg-[#fbe2de]"><Archive size={16} />Ngưng vĩnh viễn</button>}</footer>

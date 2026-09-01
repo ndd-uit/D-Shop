@@ -5,6 +5,11 @@ const getManagedRentalUnits = async () => {
     return response.data.data
 }
 
+const getManagedRentalUnit = async (rentalUnitId) => {
+    const response = await api.get(`/rental-units/${rentalUnitId}`)
+    return response.data.data
+}
+
 const createRentalUnit = async (data) => {
     const response = await api.post("/rental-units", data)
     return response.data.data
@@ -20,4 +25,4 @@ const retireRentalUnit = async (rentalUnitId, reason) => {
     return response.data.data
 }
 
-export { getManagedRentalUnits, createRentalUnit, retireRentalUnit, updateRentalUnit }
+export { getManagedRentalUnit, getManagedRentalUnits, createRentalUnit, retireRentalUnit, updateRentalUnit }

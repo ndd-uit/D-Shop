@@ -4,6 +4,7 @@ import {
     CheckCircle2,
     ClipboardCheck,
     HandCoins,
+    ImagePlus,
     LoaderCircle,
     PackageCheck,
     RefreshCw,
@@ -26,6 +27,7 @@ import {
     settleRentalOrder,
     startPreparingRentalOrder,
 } from "../../services/rentalApi.js"
+import { startPaymentCheckout } from "../../utils/paymentCheckout.js"
 
 const getApiMessage = (error, fallback) =>
     error.response?.data?.message || fallback
@@ -59,6 +61,7 @@ function PreparationForm({ order, onCompleted }) {
             [reservationId]: {
                 preparationCondition: "Tốt",
                 preparationNotes: "",
+                preparationImages: [],
                 ...(current[reservationId] ?? {}),
                 [field]: value,
             },
@@ -72,8 +75,10 @@ function PreparationForm({ order, onCompleted }) {
             const draft = drafts[reservationId] ?? {
                 preparationCondition: "Tốt",
                 preparationNotes: "",
+                preparationImages: [],
             }
-            await prepareRentalReservation(order.orderId, reservationId, draft)
+            const { preparationImages, ...data } = draft
+            await prepareRentalReservation(order.orderId, reservationId, data, preparationImages)
             await onCompleted("Đã ghi nhận RentalUnit sẵn sàng bàn giao.")
         } catch (requestError) {
             setError(getApiMessage(requestError, "Không thể ghi nhận kết quả chuẩn bị."))
@@ -91,6 +96,7 @@ function PreparationForm({ order, onCompleted }) {
                 const draft = drafts[reservation.reservationId] ?? {
                     preparationCondition: "Tốt",
                     preparationNotes: "",
+                    preparationImages: [],
                 }
                 return (
                     <fieldset
@@ -123,6 +129,17 @@ function PreparationForm({ order, onCompleted }) {
                                 />
                             </label>
                         </div>
+                        <label className="mt-3 block rounded-xl border border-dashed border-[#d8c9bf] bg-[#fffdf9] p-3 text-xs font-semibold text-[#665b55]">
+                            <span className="flex items-center gap-2"><ImagePlus size={16} className="text-[#b65e56]" />Ảnh tình trạng trước thuê</span>
+                            <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/webp"
+                                multiple
+                                onChange={(event) => updateDraft(reservation.reservationId, "preparationImages", Array.from(event.target.files ?? []).slice(0, 5))}
+                                className="mt-2 block w-full text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[#fbe2de] file:px-3 file:py-2 file:font-semibold file:text-[#9b4d47]"
+                            />
+                            <span className="mt-2 block font-normal text-[#897d77]">JPG, PNG hoặc WEBP · tối đa 5 ảnh · 5MB mỗi ảnh{draft.preparationImages.length ? ` · đã chọn ${draft.preparationImages.length} ảnh` : ""}</span>
+                        </label>
                         <button
                             type="button"
                             onClick={() => submit(reservation.reservationId)}
@@ -217,8 +234,7 @@ function HandoverForm({ order, onCompleted }) {
                 await onCompleted("Tiền cọc qua cổng thanh toán đã được ghi nhận.")
                 return
             }
-            if (result.paymentUrl) {
-                window.open(result.paymentUrl, "_blank", "noopener,noreferrer")
+            if (startPaymentCheckout(result, { newTab: true })) {
                 setGatewayMessage("Đã tạo giao dịch cọc. Hoàn tất thanh toán ở tab mới, sau đó kiểm tra lại trạng thái.")
                 return
             }
@@ -452,14 +468,14 @@ function InspectionItemForm({ orderId, item, onCompleted }) {
         accessoriesStatus: "Đầy đủ",
         issueType: "",
         description: "",
-        evidence: "",
+        evidenceImages: [],
         proposedCharge: "0",
     })
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
     const charge = Number(form.proposedCharge)
     const chargeEvidenceMissing = charge > 0 && (
-        !form.issueType || !form.description.trim() || !form.evidence.trim()
+        !form.issueType || !form.description.trim() || form.evidenceImages.length === 0
     )
 
     const update = (field, value) => setForm((current) => ({ ...current, [field]: value }))
@@ -474,12 +490,8 @@ function InspectionItemForm({ orderId, item, onCompleted }) {
                 accessoriesStatus: form.accessoriesStatus.trim() || null,
                 issueType: form.issueType || null,
                 description: form.description.trim() || null,
-                evidenceUrls: form.evidence
-                    .split("\n")
-                    .map((value) => value.trim())
-                    .filter(Boolean),
                 proposedCharge: charge,
-            })
+            }, form.evidenceImages)
             await onCompleted(`Đã ghi nhận kiểm tra ${item.garment?.name || "trang phục"}.`)
         } catch (requestError) {
             setError(getApiMessage(requestError, "Không thể lưu kết quả kiểm tra."))
@@ -521,12 +533,11 @@ function InspectionItemForm({ orderId, item, onCompleted }) {
                     Mô tả kiểm tra
                     <textarea value={form.description} onChange={(event) => update("description", event.target.value)} rows={3} className={`${inputClass} mt-2 py-3`} />
                 </label>
-                {charge > 0 && (
-                    <label className="text-xs font-semibold text-[#665b55] sm:col-span-2">
-                        Ảnh bằng chứng, mỗi dòng một URL
-                        <textarea value={form.evidence} onChange={(event) => update("evidence", event.target.value)} rows={2} className={`${inputClass} mt-2 py-3`} />
-                    </label>
-                )}
+                <label className="rounded-xl border border-dashed border-[#d8c9bf] bg-[#fffdf9] p-3 text-xs font-semibold text-[#665b55] sm:col-span-2">
+                    <span className="flex items-center gap-2"><ImagePlus size={16} className="text-[#b65e56]" />Ảnh bằng chứng {charge > 0 ? "*" : "(không bắt buộc)"}</span>
+                    <input type="file" accept="image/jpeg,image/png,image/webp" multiple required={charge > 0} onChange={(event) => update("evidenceImages", Array.from(event.target.files ?? []).slice(0, 5))} className="mt-2 block w-full text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-[#fbe2de] file:px-3 file:py-2 file:font-semibold file:text-[#9b4d47]" />
+                    <span className="mt-2 block font-normal text-[#897d77]">JPG, PNG hoặc WEBP · tối đa 5 ảnh · 5MB mỗi ảnh{form.evidenceImages.length ? ` · đã chọn ${form.evidenceImages.length} ảnh` : ""}</span>
+                </label>
             </div>
             {chargeEvidenceMissing && (
                 <p className="mt-3 text-sm text-red-600">

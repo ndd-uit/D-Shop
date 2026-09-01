@@ -22,6 +22,7 @@ import { getCart } from "../services/cartApi.js"
 import { createRentalPayment } from "../services/paymentApi.js"
 import { createRentalOrder } from "../services/rentalApi.js"
 import { getMyProfile, updateMyProfile } from "../services/userApi.js"
+import { startPaymentCheckout } from "../utils/paymentCheckout.js"
 
 function CheckoutPage() {
     const [searchParams] = useSearchParams()
@@ -166,8 +167,7 @@ function CheckoutPage() {
         try {
             const result = await createRentalPayment(createResult.order.orderId)
 
-            if (result.paymentUrl) {
-                window.location.assign(result.paymentUrl)
+            if (startPaymentCheckout(result)) {
                 return
             }
 

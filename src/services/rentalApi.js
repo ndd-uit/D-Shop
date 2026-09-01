@@ -20,10 +20,24 @@ const startPreparingRentalOrder = async (orderId) => {
     return response.data.data
 }
 
-const prepareRentalReservation = async (orderId, reservationId, data) => {
+const buildEvidenceFormData = (data, images = []) => {
+    const formData = new FormData()
+
+    Object.entries(data).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+            formData.append(key, String(value))
+        }
+    })
+    images.forEach((image) => formData.append("images", image))
+
+    return formData
+}
+
+const prepareRentalReservation = async (orderId, reservationId, data, images = []) => {
     const response = await api.patch(
         `/rentals/${orderId}/reservations/${reservationId}/prepare`,
-        data,
+        buildEvidenceFormData(data, images),
+        { headers: { "Content-Type": "multipart/form-data" } },
     )
     return response.data.data
 }
@@ -67,10 +81,11 @@ const receiveRentalReturn = async (orderId) => {
     return response.data.data
 }
 
-const inspectRentalOrderItem = async (orderId, itemId, data) => {
+const inspectRentalOrderItem = async (orderId, itemId, data, images = []) => {
     const response = await api.post(
         `/rentals/${orderId}/items/${itemId}/inspection`,
-        data,
+        buildEvidenceFormData(data, images),
+        { headers: { "Content-Type": "multipart/form-data" } },
     )
     return response.data.data
 }

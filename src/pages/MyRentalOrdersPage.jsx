@@ -11,6 +11,7 @@ import CustomSelect from "../components/common/CustomSelect.jsx"
 import RentalOrderCard from "../components/rental/RentalOrderCard.jsx"
 import { createRentalPayment } from "../services/paymentApi.js"
 import { getRentalOrders } from "../services/rentalApi.js"
+import { startPaymentCheckout } from "../utils/paymentCheckout.js"
 
 const STATUS_OPTIONS = [
     ["PENDING_PAYMENT", "Chờ thanh toán"],
@@ -121,8 +122,7 @@ function MyRentalOrdersPage() {
         try {
             const result = await createRentalPayment(orderId)
 
-            if (result.paymentUrl) {
-                window.location.assign(result.paymentUrl)
+            if (startPaymentCheckout(result)) {
                 return
             }
 

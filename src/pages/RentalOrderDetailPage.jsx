@@ -30,6 +30,7 @@ import {
     getRentalOrderDetail,
     getRentalOrderHistory,
 } from "../services/rentalApi.js"
+import { startPaymentCheckout } from "../utils/paymentCheckout.js"
 
 const getApiMessage = (error, fallback) =>
     error.response?.data?.message || fallback
@@ -168,8 +169,7 @@ function RentalOrderDetailPage({
         try {
             const result = await createRentalPayment(id)
 
-            if (result.paymentUrl) {
-                window.location.assign(result.paymentUrl)
+            if (startPaymentCheckout(result)) {
                 return
             }
 
