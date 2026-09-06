@@ -359,7 +359,7 @@ function RentalSelectionPanel({ garment }) {
                             </dd>
                         </div>
                         <div className="flex justify-between gap-4 border-t border-brand-mint pt-3">
-                            <dt>Giá thuê cố định</dt>
+                            <dt>Giá thuê/ngày</dt>
                             <dd className="font-semibold text-brand-text">
                                 {formatCurrency(garment.rentalPrice)}
                             </dd>

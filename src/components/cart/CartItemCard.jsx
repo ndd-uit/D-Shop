@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom"
 import { Minus, Plus, Trash2 } from "lucide-react"
+import { calculateRentalLineTotal } from "../../utils/rentalPricing.js"
 
 const formatCurrency = (value) => {
     const number = Number(value)
@@ -29,6 +30,7 @@ const getFirstImage = (imageUrls) => {
 
 function CartItemCard({
     item,
+    rentalDays,
     busy,
     periodDirty,
     selected,
@@ -39,7 +41,7 @@ function CartItemCard({
     const garment = item.garment ?? {}
     const imageUrl = getFirstImage(garment.imageUrls)
     const quantity = Number(item.quantity)
-    const rentalLineTotal = Number(garment.rentalPrice) * quantity
+    const rentalLineTotal = calculateRentalLineTotal(garment.rentalPrice, quantity, rentalDays)
     const depositLineTotal = Number(garment.depositAmount) * quantity
     const controlsDisabled = busy || periodDirty
 
@@ -92,7 +94,7 @@ function CartItemCard({
                             Kích thước: {item.requestedSize}
                         </p>
                         <p className="mt-1 text-xs text-gray-500">
-                            Giá thuê cố định: {formatCurrency(garment.rentalPrice)}
+                            Giá thuê: {formatCurrency(garment.rentalPrice)}/ngày
                         </p>
                     </div>
 
@@ -137,9 +139,11 @@ function CartItemCard({
 
                     <dl className="grid gap-2 text-sm sm:justify-self-end sm:text-right">
                         <div>
-                            <dt className="text-xs text-gray-500">Tiền thuê</dt>
+                            <dt className="text-xs text-gray-500">
+                                Tiền thuê{rentalDays > 0 ? ` (${rentalDays} ngày × ${quantity})` : ""}
+                            </dt>
                             <dd className="mt-0.5 font-semibold text-brand-text">
-                                {formatCurrency(rentalLineTotal)}
+                                {rentalDays > 0 ? formatCurrency(rentalLineTotal) : "Chọn ngày thuê"}
                             </dd>
                         </div>
                         <div>

@@ -75,7 +75,7 @@ const GarmentCard = ({ garment }) => {
 
                     <div className="mt-2.5 flex min-w-0 items-end justify-between gap-2">
                         <div className="min-w-0">
-                            <p className="text-[10px] text-gray-500 sm:text-[11px]">Giá thuê</p>
+                            <p className="text-[10px] text-gray-500 sm:text-[11px]">Giá thuê/ngày</p>
                             <p className="truncate text-[15px] font-bold text-[#b85f57] sm:text-base">
                                 {formatCurrency(garment.rentalPrice)}
                             </p>

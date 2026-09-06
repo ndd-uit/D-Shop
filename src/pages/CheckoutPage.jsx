@@ -23,6 +23,11 @@ import { createRentalPayment } from "../services/paymentApi.js"
 import { createRentalOrder } from "../services/rentalApi.js"
 import { getMyProfile, updateMyProfile } from "../services/userApi.js"
 import { startPaymentCheckout } from "../utils/paymentCheckout.js"
+import {
+    calculateRentalLineTotal,
+    calculateRentalTotals,
+    getRentalDayCount,
+} from "../utils/rentalPricing.js"
 
 function CheckoutPage() {
     const [searchParams] = useSearchParams()
@@ -91,21 +96,10 @@ function CheckoutPage() {
         new Set(selectedCartItemIds).size === selectedCartItemIds.length &&
         items.length === selectedCartItemIds.length,
     )
+    const rentalDays = getRentalDayCount(cart?.rentalStartAt, cart?.returnDueAt)
     const totals = useMemo(
-        () =>
-            items.reduce(
-                (result, item) => {
-                    const quantity = Number(item.quantity) || 0
-                    result.quantity += quantity
-                    result.rental +=
-                        (Number(item.garment?.rentalPrice) || 0) * quantity
-                    result.deposit +=
-                        (Number(item.garment?.depositAmount) || 0) * quantity
-                    return result
-                },
-                { quantity: 0, rental: 0, deposit: 0 },
-            ),
-        [items],
+        () => calculateRentalTotals(items, rentalDays),
+        [items, rentalDays],
     )
 
 
@@ -118,7 +112,8 @@ function CheckoutPage() {
         selectionValid &&
         items.length > 0 &&
         cart?.rentalStartAt &&
-        cart?.returnDueAt,
+        cart?.returnDueAt &&
+        rentalDays > 0,
     )
     const canCreateOrder = Boolean(
         profileComplete &&
@@ -352,14 +347,14 @@ function CheckoutPage() {
                                                     Kích thước: {item.requestedSize}, số lượng: {quantity}
                                                 </p>
                                                 <p className="mt-2 text-xs text-gray-500">
-                                                    Giá thuê cố định: {formatCurrency(garment.rentalPrice)}
+                                                    Giá thuê: {formatCurrency(garment.rentalPrice)}/ngày
                                                 </p>
                                             </div>
                                             <dl className="space-y-2 text-sm sm:text-right">
                                                 <div>
-                                                    <dt className="text-xs text-gray-500">Tiền thuê</dt>
+                                                    <dt className="text-xs text-gray-500">Tiền thuê ({rentalDays} ngày × {quantity})</dt>
                                                     <dd className="font-semibold text-brand-text">
-                                                        {formatCurrency(Number(garment.rentalPrice) * quantity)}
+                                                        {formatCurrency(calculateRentalLineTotal(garment.rentalPrice, quantity, rentalDays))}
                                                     </dd>
                                                 </div>
                                                 <div>
@@ -421,7 +416,8 @@ function CheckoutPage() {
                                 {formatCurrency(totals.rental)}
                             </p>
                             <p className="mt-2 text-right text-xs leading-relaxed text-gray-500">
-                                Tiền thuê là giá cố định, không nhân theo thời lượng.
+                                Tiền thuê = giá/ngày × số ngày × số lượng.
+                                Tính cả ngày nhận và ngày trả theo giờ Việt Nam.
                             </p>
                         </div>
 

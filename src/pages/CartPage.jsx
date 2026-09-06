@@ -7,24 +7,16 @@ import CartRentalPeriod from "../components/cart/CartRentalPeriod.jsx"
 import CartSummary from "../components/cart/CartSummary.jsx"
 import { getDurationLabel } from "../components/rental/rentalOrderUtils.js"
 import {
+    calculateRentalTotals,
+    getRentalDayCount,
+    getVietnamDateOnly as toDateOnly,
+} from "../utils/rentalPricing.js"
+import {
     getCart,
     removeCartItem,
     updateCartItemQuantity,
     updateCartRentalPeriod,
 } from "../services/cartApi.js"
-
-const toDateOnly = (value) => {
-    if (!value) return ""
-
-    const date = new Date(value)
-    if (Number.isNaN(date.getTime())) return ""
-
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-
-    return `${year}-${month}-${day}`
-}
 
 const getApiMessage = (error, fallback) =>
     error.response?.data?.message ?? fallback
@@ -99,23 +91,11 @@ function CartPage() {
     const periodDirty =
         rentalStartAt !== savedStartAt || returnDueAt !== savedReturnDueAt
 
+    const rentalDays = getRentalDayCount(cart?.rentalStartAt, cart?.returnDueAt)
+
     const totals = useMemo(
-        () =>
-            selectedItems.reduce(
-                (result, item) => {
-                    const quantity = Number(item.quantity) || 0
-                    const rentalPrice = Number(item.garment?.rentalPrice) || 0
-                    const depositAmount = Number(item.garment?.depositAmount) || 0
-
-                    result.quantity += quantity
-                    result.rental += rentalPrice * quantity
-                    result.deposit += depositAmount * quantity
-
-                    return result
-                },
-                { quantity: 0, rental: 0, deposit: 0 },
-            ),
-        [selectedItems],
+        () => calculateRentalTotals(selectedItems, rentalDays),
+        [selectedItems, rentalDays],
     )
 
 
@@ -313,6 +293,7 @@ function CartPage() {
             selectedCartItemIds.length > 0 &&
             cart.rentalStartAt &&
             cart.returnDueAt &&
+            rentalDays > 0 &&
             !periodDirty &&
             !savingPeriod &&
             !busyItemId,
@@ -399,6 +380,7 @@ function CartPage() {
                                     <CartItemCard
                                         key={item.cartItemId}
                                         item={item}
+                                        rentalDays={rentalDays}
                                         busy={busyItemId === item.cartItemId}
                                         periodDirty={periodDirty}
                                         selected={selectedCartItemIds.includes(item.cartItemId)}
@@ -423,6 +405,7 @@ function CartPage() {
                         rentalSubtotal={totals.rental}
                         depositSubtotal={totals.deposit}
                         durationLabel={durationLabel}
+                        rentalDays={rentalDays}
                         canContinue={canContinue}
                         onContinue={handleContinue}
                         continueNotice={continueNotice}

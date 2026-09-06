@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { CheckCircle2, Clock3, CreditCard, LoaderCircle } from "lucide-react"
+import { formatCurrency } from "../rental/rentalOrderUtils.js"
 
 const formatExpiresAt = (value) => {
     const date = new Date(value)
@@ -68,6 +69,13 @@ function CheckoutSuccessDialog({ result, paying, paymentError, onPayNow }) {
                 <p className="mt-2 text-center text-sm leading-relaxed text-gray-500">
                     Đơn đang chờ thanh toán. Trang phục chỉ được giữ đến thời hạn do backend cung cấp.
                 </p>
+
+                <div className="mt-5 flex items-center justify-between gap-4 text-sm">
+                    <span className="text-gray-500">Tiền thuê cần thanh toán</span>
+                    <strong className="text-lg text-[#b85f57]">
+                        {formatCurrency(result.order.upfrontAmount ?? result.order.rentalAmount)}
+                    </strong>
+                </div>
 
                 <div className="mt-6 rounded-xl border border-brand-mint bg-[#eef5f1] p-4">
                     <div className="flex items-center justify-between gap-4">

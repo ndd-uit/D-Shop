@@ -80,7 +80,7 @@ function GarmentListPage() {
         if (keyword) items.push({ key: "keyword", label: `Từ khóa: "${keyword}"` })
         if (categoryId) items.push({ key: "categoryId", label: `Danh mục: ${categoryName}` })
         if (size) items.push({ key: "size", label: `Kích thước: ${size}` })
-        if (priceLabel) items.push({ key: "price", label: `Giá: ${priceLabel}` })
+        if (priceLabel) items.push({ key: "price", label: `Giá/ngày: ${priceLabel}` })
         if (rentalStartAt && returnDueAt) items.push({ key: "dates", label: `Lịch thuê: ${formatDate(rentalStartAt)} - ${formatDate(returnDueAt)}` })
         return items
     }, [keyword, categoryId, categoryName, size, priceLabel, rentalStartAt, returnDueAt])

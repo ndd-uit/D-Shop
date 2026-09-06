@@ -15,6 +15,7 @@ function CartSummary({
     rentalSubtotal,
     depositSubtotal,
     durationLabel,
+    rentalDays,
     canContinue,
     onContinue,
     continueNotice,
@@ -44,7 +45,7 @@ function CartSummary({
                 <div className="flex justify-between gap-4">
                     <dt className="text-gray-500">Tiền thuê</dt>
                     <dd className="font-semibold text-brand-text">
-                        {formatCurrency(rentalSubtotal)}
+                        {rentalDays > 0 ? formatCurrency(rentalSubtotal) : "Chọn ngày thuê"}
                     </dd>
                 </div>
                 <div className="flex justify-between gap-4">
@@ -60,10 +61,11 @@ function CartSummary({
                     Tiền cần thanh toán ngay
                 </p>
                 <p className="mt-1 text-right text-2xl font-bold text-[#b85f57]">
-                    {formatCurrency(rentalSubtotal)}
+                    {rentalDays > 0 ? formatCurrency(rentalSubtotal) : "Chọn ngày thuê"}
                 </p>
                 <p className="mt-2 text-right text-xs leading-relaxed text-gray-500">
-                    Giá thuê là giá cố định và không nhân theo thời lượng thuê.
+                    Tiền thuê = giá/ngày × số ngày × số lượng.
+                    Tính cả ngày nhận và ngày trả theo giờ Việt Nam.
                 </p>
             </div>
 

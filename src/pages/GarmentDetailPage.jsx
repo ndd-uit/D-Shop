@@ -188,10 +188,10 @@ function GarmentDetailPage() {
 
                             <div className="mt-5">
                                 <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
-                                    Giá thuê cố định
+                                    Giá thuê/ngày
                                 </p>
                                 <p className="mt-1 text-2xl font-bold text-[#b85f57]">
-                                    {formatCurrency(garment.rentalPrice)}
+                                    {formatCurrency(garment.rentalPrice)}/ngày
                                 </p>
                             </div>
 

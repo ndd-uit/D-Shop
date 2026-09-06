@@ -1,3 +1,5 @@
+import { getRentalDayCount } from "../../utils/rentalPricing.js"
+
 const formatCurrency = (value) => {
     const amount = Number(value)
     return Number.isFinite(amount) ? `${amount.toLocaleString("vi-VN")}đ` : "0đ"
@@ -9,6 +11,7 @@ const formatDateTime = (value) => {
     if (Number.isNaN(date.getTime())) return "Chưa cập nhật"
 
     return new Intl.DateTimeFormat("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
         dateStyle: "short",
         timeStyle: "short",
     }).format(date)
@@ -20,39 +23,15 @@ const formatDate = (value) => {
     if (Number.isNaN(date.getTime())) return "Chưa chọn"
 
     return new Intl.DateTimeFormat("vi-VN", {
+        timeZone: "Asia/Ho_Chi_Minh",
         dateStyle: "long",
     }).format(date)
 }
 
-const getCalendarDayOrdinal = (date) => {
-    const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "Asia/Ho_Chi_Minh",
-        year: "numeric",
-        month: "numeric",
-        day: "numeric",
-    }).formatToParts(date)
-    const values = Object.fromEntries(
-        parts
-            .filter((part) => part.type !== "literal")
-            .map((part) => [part.type, Number(part.value)]),
-    )
-
-    return Math.floor(
-        Date.UTC(values.year, values.month - 1, values.day) /
-            (1000 * 60 * 60 * 24),
-    )
-}
-
 const getDurationLabel = (startValue, endValue) => {
-    const start = new Date(startValue)
-    const end = new Date(endValue)
-    const diffMs = end.getTime() - start.getTime()
-
-    if (!Number.isFinite(diffMs) || diffMs <= 0) return "Không hợp lệ"
-
-    const days = getCalendarDayOrdinal(end) - getCalendarDayOrdinal(start)
-
-    return days > 0 ? `${days} ngày` : "Trong ngày"
+    if (!startValue || !endValue) return "Chưa chọn"
+    const days = getRentalDayCount(startValue, endValue)
+    return days > 0 ? `${days} ngày` : "Không hợp lệ"
 }
 
 const getFirstImage = (imageUrls) => {

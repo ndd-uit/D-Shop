@@ -190,7 +190,7 @@ function RentalSearchPanel({
                     <label className="block">
                         <span className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
                             <WalletCards size={15} />
-                            Giá thuê
+                            Giá thuê/ngày
                         </span>
 
                         <CustomSelect

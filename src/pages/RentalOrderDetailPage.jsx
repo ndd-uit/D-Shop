@@ -441,7 +441,7 @@ function RentalOrderDetailPage({
                                     return (
                                         <article
                                             key={line.key}
-                                            className="grid gap-4 rounded-xl border border-[#e9e0d8] bg-brand-bg p-4 sm:grid-cols-[72px_1fr_auto] sm:items-center"
+                                            className="grid gap-4 rounded-xl border border-[#e9e0d8] bg-brand-bg p-4 sm:grid-cols-[72px_1fr] sm:items-center"
                                         >
                                             <div className="aspect-[3/4] w-[72px] overflow-hidden rounded-lg bg-[#eee6df]">
                                                 {imageUrl ? (
@@ -464,28 +464,15 @@ function RentalOrderDetailPage({
                                                 <p className="mt-1 text-xs text-gray-500">
                                                     Kích thước: {line.requestedSize}, số lượng: {line.quantity}
                                                 </p>
-                                                <p className="mt-2 text-xs text-gray-500">
-                                                    Giá thuê cố định: {formatCurrency(line.garment.rentalPrice)}
-                                                </p>
                                             </div>
-                                            <dl className="space-y-2 text-sm sm:text-right">
-                                                <div>
-                                                    <dt className="text-xs text-gray-500">Tiền thuê</dt>
-                                                    <dd className="font-semibold text-brand-text">
-                                                        {formatCurrency(Number(line.garment.rentalPrice) * line.quantity)}
-                                                    </dd>
-                                                </div>
-                                                <div>
-                                                    <dt className="text-xs text-gray-500">Tiền cọc</dt>
-                                                    <dd className="font-medium text-brand-text">
-                                                        {formatCurrency(Number(line.garment.depositAmount) * line.quantity)}
-                                                    </dd>
-                                                </div>
-                                            </dl>
                                         </article>
                                     )
                                 })}
                             </div>
+                            <p className="mt-4 text-xs leading-relaxed text-gray-500">
+                                Tiền thuê và tiền cọc đã chốt khi đặt đơn được hiển thị
+                                tại phần Tổng quan thanh toán.
+                            </p>
                         </section>
                     </div>
 

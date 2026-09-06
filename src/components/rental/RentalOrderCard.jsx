@@ -139,9 +139,15 @@ function RentalOrderCard({ order, paying, paymentError, onPay }) {
                         </dd>
                     </div>
                     <div className="col-span-2 mt-1 border-t border-[#e9e0d8] pt-2">
-                        <dt className="text-xs text-gray-500">Tiền cần thanh toán</dt>
+                        <dt className="text-xs text-gray-500">
+                            {order.status === "PENDING_PAYMENT"
+                                ? "Tiền thuê cần thanh toán"
+                                : "Tổng đã thanh toán"}
+                        </dt>
                         <dd className="mt-1 text-lg font-bold text-[#a9544d]">
-                            {formatCurrency(order.rentalAmount)}
+                            {formatCurrency(order.status === "PENDING_PAYMENT"
+                                ? order.upfrontAmount ?? order.rentalAmount
+                                : order.totalPaid)}
                         </dd>
                     </div>
                 </dl>
