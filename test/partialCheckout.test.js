@@ -58,7 +58,7 @@ const initialCart = () => ({
     ],
 });
 
-const createFakeDb = ({ unavailableGarmentId = null } = {}) => {
+const createFakeDb = ({ unavailableGarmentId = null, unitCount = 1 } = {}) => {
     const state = {
         cart: initialCart(),
         orders: [],
@@ -91,12 +91,14 @@ const createFakeDb = ({ unavailableGarmentId = null } = {}) => {
                             return [];
                         }
 
-                        return [{
-                            rentalUnitId:
-                                where.garmentId === IDS.garmentA
-                                    ? IDS.unitA
-                                    : IDS.unitB,
-                        }];
+                        const baseId = where.garmentId === IDS.garmentA
+                            ? IDS.unitA
+                            : IDS.unitB;
+                        return Array.from({ length: unitCount }, (_, index) => ({
+                            rentalUnitId: baseId.slice(0, -12) + String(
+                                Number(baseId.slice(-12)) + index * 2
+                            ).padStart(12, "0"),
+                        }));
                     },
                 },
                 rentalOrder: {
@@ -173,7 +175,8 @@ test("partial checkout creates an order from one selected item only", async () =
 
     const result = await checkout([IDS.itemA], db);
 
-    assert.equal(result.order.rentalAmount, 350000);
+    assert.equal(result.order.rentalAmount, 1050000);
+    assert.equal(result.order.upfrontAmount, 1050000);
     assert.equal(result.order.depositAmount, 500000);
     assert.equal(db.state.orderItems.length, 1);
     assert.equal(db.state.orderItems[0].garmentId, IDS.garmentA);
@@ -184,10 +187,49 @@ test("partial checkout supports multiple selected items", async () => {
 
     const result = await checkout([IDS.itemA, IDS.itemB], db);
 
-    assert.equal(result.order.rentalAmount, 550000);
+    assert.equal(result.order.rentalAmount, 1650000);
+    assert.equal(result.order.upfrontAmount, 1650000);
     assert.equal(result.order.depositAmount, 800000);
     assert.equal(db.state.orderItems.length, 2);
     assert.equal(db.state.reservations.length, 2);
+});
+
+for (const scenario of [
+    { start: "2026-09-06", end: "2026-09-06", quantity: 1, price: 80000, rental: 80000, deposit: 250000 },
+    { start: "2026-09-02", end: "2026-09-03", quantity: 1, price: 80000, rental: 160000, deposit: 250000 },
+    { start: "2026-09-06", end: "2026-09-12", quantity: 1, price: 80000, rental: 560000, deposit: 250000 },
+    { start: "2026-09-06", end: "2026-09-12", quantity: 2, price: 80000, rental: 1120000, deposit: 500000 },
+    { start: "2026-09-06", end: "2026-09-12", quantity: 1, price: 120000, rental: 840000, deposit: 250000 },
+]) {
+    test(`checkout bills ${scenario.start} to ${scenario.end}, ${scenario.quantity} units at ${scenario.price}/day`, async () => {
+        const db = createFakeDb({ unitCount: scenario.quantity });
+        db.state.cart.rentalStartAt = new Date(`${scenario.start}T08:00:00+07:00`);
+        db.state.cart.returnDueAt = new Date(`${scenario.end}T18:00:00+07:00`);
+        db.state.cart.items[0].quantity = scenario.quantity;
+        db.state.cart.items[0].garment.rentalPrice = scenario.price;
+        db.state.cart.items[0].garment.depositAmount = 250000;
+
+        const { order } = await checkout([IDS.itemA], db);
+
+        assert.equal(order.rentalAmount, scenario.rental);
+        assert.equal(order.upfrontAmount, scenario.rental);
+        assert.equal(order.depositAmount, scenario.deposit);
+        assert.equal(db.state.orderItems.length, scenario.quantity);
+        assert.equal(db.state.reservations.length, scenario.quantity);
+        // The two reservation buffer dates must not be billed.
+        assert.equal(
+            db.state.reservations[0].blockedStartAt.getTime(),
+            db.state.cart.rentalStartAt.getTime() - 86400000,
+        );
+    });
+}
+
+test("checkout rejects an inverted rental period before creating an order", async () => {
+    const db = createFakeDb();
+    db.state.cart.returnDueAt = new Date("2026-09-09T11:00:00Z");
+    await assert.rejects(checkout([IDS.itemA], db), /INVALID_RENTAL_PERIOD/);
+    assert.equal(db.state.orders.length, 0);
+    assert.equal(db.state.cart.items.length, 2);
 });
 
 test("unselected items and the cart rental period remain after checkout", async () => {

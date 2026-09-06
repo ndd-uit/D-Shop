@@ -112,6 +112,12 @@ const createRentalOrder = async (req, res) => {
                 message: "Cần cung cấp thời gian thuê",
             });
         }
+        if (error.message === "INVALID_RENTAL_PERIOD") {
+            return res.status(400).json({
+                success: false,
+                message: "Thời gian thuê không hợp lệ",
+            });
+        }
         if (error.message === "RENTAL_INFO_REQUIRED") {
             return res.status(400).json({
                 success: false,

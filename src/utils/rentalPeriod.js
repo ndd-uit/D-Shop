@@ -168,6 +168,28 @@ const normalizeRentalPeriod = (
     };
 };
 
+// Bill each Vietnam calendar date, including pickup and return dates.
+// Reservation buffer dates are not part of the customer's rental period.
+const getRentalDayCount = (rentalStartAt, returnDueAt) => {
+    const period = normalizeRentalPeriod(rentalStartAt, returnDueAt);
+    const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Ho_Chi_Minh",
+        year: "numeric",
+        month: "numeric",
+        day: "numeric",
+    });
+    const ordinal = (date) => {
+        const parts = Object.fromEntries(
+            formatter.formatToParts(date)
+                .filter((part) => part.type !== "literal")
+                .map((part) => [part.type, Number(part.value)])
+        );
+        return Date.UTC(parts.year, parts.month - 1, parts.day) / ONE_DAY_MS;
+    };
+
+    return ordinal(period.returnDueAt) - ordinal(period.rentalStartAt) + 1;
+};
+
 const getReservationBlockPeriod = (
     rentalStartAt,
     returnDueAt
@@ -184,6 +206,7 @@ export {
     assertNoShowEligible,
     assertReturnWithinBusinessHours,
     getPickupWindowEndAt,
+    getRentalDayCount,
     getReservationBlockPeriod,
     normalizeRentalPeriod,
 };

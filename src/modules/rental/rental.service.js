@@ -79,6 +79,7 @@ import { calculateSettlementAmounts } from "../../utils/settlement.js";
 import {
     assertNoShowEligible,
     assertReturnWithinBusinessHours,
+    getRentalDayCount,
 } from "../../utils/rentalPeriod.js";
 
 const RENTAL_UNIT_STATUS_TRANSITIONS = {
@@ -377,6 +378,11 @@ const createRental = async (
                 throw new Error("RENTAL_PERIOD_REQUIRED");
             }
 
+            const rentalDays = getRentalDayCount(
+                cart.rentalStartAt,
+                cart.returnDueAt
+            );
+
             const selectedItems = selectCartItemsForCheckout(
                 cart,
                 normalizedCartItemIds
@@ -416,8 +422,8 @@ const createRental = async (
                         blockedEndAt: availability.blockEndAt,
                     });
                 }
-                // Tính toán tổng số tiền thuê và tiền đặt cọc dựa trên chính sách thuê hiện tại
-                rentalAmount += Number(item.garment.rentalPrice) * item.quantity;
+                // rentalPrice is the daily rate; deposits are charged per unit only.
+                rentalAmount += Number(item.garment.rentalPrice) * rentalDays * item.quantity;
                 depositAmount += Number(item.garment.depositAmount) * item.quantity;
             }
             const now = new Date();
