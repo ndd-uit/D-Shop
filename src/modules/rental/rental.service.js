@@ -349,8 +349,15 @@ const createRental = async (
     pickupInfo,
     returnInfo,
     selectedCartItemIds,
+    expectedRentalAmount,
     db = prisma
 ) => {
+    if (expectedRentalAmount !== undefined && (
+        typeof expectedRentalAmount !== "number" ||
+        !Number.isFinite(expectedRentalAmount) || expectedRentalAmount <= 0
+    )) {
+        throw new Error("INVALID_EXPECTED_RENTAL_AMOUNT");
+    }
     const normalizedPickupInfo = normalizeRequiredString(
         pickupInfo,
         "RENTAL_INFO_REQUIRED"
@@ -425,6 +432,9 @@ const createRental = async (
                 // rentalPrice is the daily rate; deposits are charged per unit only.
                 rentalAmount += Number(item.garment.rentalPrice) * rentalDays * item.quantity;
                 depositAmount += Number(item.garment.depositAmount) * item.quantity;
+            }
+            if (expectedRentalAmount !== undefined && rentalAmount !== expectedRentalAmount) {
+                throw new Error("RENTAL_PRICE_CHANGED");
             }
             const now = new Date();
             const holdExpireAt = new Date(now.getTime() + policy.holdDuration * 60 * 1000); // Thoi gian het han = thoi diem hien tai + thoi gian hold (phut) * 60 * 1000 (chuyen sang milisecond)

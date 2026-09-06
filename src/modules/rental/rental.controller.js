@@ -84,7 +84,8 @@ const createRentalOrder = async (req, res) => {
             customerId,
             pickupInfo,
             returnInfo,
-            selectedCartItemIds
+            selectedCartItemIds,
+            req.body?.expectedRentalAmount
         );
         return res.status(201).json({
 
@@ -110,6 +111,12 @@ const createRentalOrder = async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Cần cung cấp thời gian thuê",
+            });
+        }
+        if (error.message === "INVALID_EXPECTED_RENTAL_AMOUNT" || error.message === "RENTAL_PRICE_CHANGED") {
+            return res.status(error.message === "RENTAL_PRICE_CHANGED" ? 409 : 400).json({
+                success: false,
+                message: "Giá thuê đã thay đổi hoặc không khớp. Vui lòng tải lại giỏ thuê trước khi đặt đơn.",
             });
         }
         if (error.message === "INVALID_RENTAL_PERIOD") {

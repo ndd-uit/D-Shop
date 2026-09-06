@@ -161,14 +161,25 @@ const createFakeDb = ({ unavailableGarmentId = null, unitCount = 1 } = {}) => {
     return db;
 };
 
-const checkout = (selectedCartItemIds, db) =>
+const checkout = (selectedCartItemIds, db, expectedRentalAmount) =>
     createRental(
         IDS.customer,
         "Nhận tại D Shop",
         "Trả tại D Shop",
         selectedCartItemIds,
+        expectedRentalAmount,
         db
     );
+
+test("a stale quote is rejected before any order or reservation is persisted", async () => {
+    const db = createFakeDb();
+    await assert.rejects(checkout([IDS.itemA], db, 350000), /RENTAL_PRICE_CHANGED/);
+    assert.equal(db.state.orders.length, 0);
+    assert.equal(db.state.reservations.length, 0);
+    assert.equal(db.state.cart.items.length, 2);
+    const { order } = await checkout([IDS.itemA], db, 1050000);
+    assert.equal(order.upfrontAmount, 1050000);
+});
 
 test("partial checkout creates an order from one selected item only", async () => {
     const db = createFakeDb();

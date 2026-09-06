@@ -52,10 +52,13 @@ const transactionOptions = {
     timeout: 30000,
 };
 
-const withTransactionRetry = async (operation) => {
+const withTransactionRetry = async (
+    operation,
+    db = prisma
+) => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
-            return await prisma.$transaction(
+            return await db.$transaction(
                 operation,
                 transactionOptions
             );
@@ -160,6 +163,7 @@ const createPaymentAttempt = async ({
     orderId,
     customerId = null,
     purpose,
+    db = prisma,
 }) => {
     validateUuidValue(orderId);
 
@@ -198,13 +202,6 @@ const createPaymentAttempt = async ({
                     tx
                 );
 
-            if (pending) {
-                return {
-                    payment: pending,
-                    alreadyCreated: true,
-                };
-            }
-
             if (
                 purpose === PaymentPurpose.RENTAL &&
                 order.status !==
@@ -230,6 +227,9 @@ const createPaymentAttempt = async ({
             if (!Number.isFinite(amount) || amount <= 0) {
                 throw new Error("PAYMENT_NOT_REQUIRED");
             }
+            if (purpose === PaymentPurpose.RENTAL && amount !== Number(order.rentalAmount)) {
+                throw new Error("PAYMENT_AMOUNT_MISMATCH");
+            }
 
             if (purpose === PaymentPurpose.RENTAL) {
                 if (!hasValidTemporaryHolds(order, new Date())) {
@@ -239,6 +239,13 @@ const createPaymentAttempt = async ({
                 Number(order.collectedDepositAmount) >= amount
             ) {
                 throw new Error("DEPOSIT_ALREADY_COLLECTED");
+            }
+
+            if (pending) {
+                if (Number(pending.amount) !== amount) {
+                    throw new Error("PAYMENT_AMOUNT_MISMATCH");
+                }
+                return { payment: pending, alreadyCreated: true };
             }
 
             const payment = await createPayment(
@@ -255,7 +262,8 @@ const createPaymentAttempt = async ({
                 payment,
                 alreadyCreated: false,
             };
-        }
+        },
+        db
     );
 
     if (result.payment.status !== PaymentStatus.PENDING) {
@@ -267,11 +275,13 @@ const createPaymentAttempt = async ({
 
 const createRentalPayment = async (
     orderId,
-    customerId
+    customerId,
+    db = prisma
 ) => createPaymentAttempt({
     orderId,
     customerId,
     purpose: PaymentPurpose.RENTAL,
+    db,
 });
 
 const createDepositPayment = async (orderId) =>
@@ -703,7 +713,8 @@ const createRentalRefund = async (orderId) =>
 
 const processRefundSucceeded = async (
     refundId,
-    transactionRef
+    transactionRef,
+    db = prisma
 ) => {
     validateUuidValue(refundId);
     const normalizedRef = normalizeTransactionRef(
@@ -762,14 +773,15 @@ const processRefundSucceeded = async (
             refund: succeededRefund,
             alreadyProcessed: false,
         };
-    });
+    }, db);
 
     if (
         result.refund.type === RefundType.DEPOSIT_RETURN
     ) {
         result.completion =
             await completeRentalOrderIfReady(
-                result.refund.rentalOrderId
+                result.refund.rentalOrderId,
+                db
             );
     }
 
