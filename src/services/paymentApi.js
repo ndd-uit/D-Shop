@@ -35,7 +35,16 @@ const retryFailedRefund = async (refundId) => {
     return response.data.data
 }
 
+const confirmRefundSucceeded = async (refundId, transactionRef) => {
+    const response = await api.post("/payments/callbacks/refunds/succeeded", {
+        refundId,
+        transactionRef,
+    })
+    return response.data.data
+}
+
 export {
+    confirmRefundSucceeded,
     createDepositPayment,
     createRentalPayment,
     createRentalRefund,

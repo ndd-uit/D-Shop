@@ -106,11 +106,13 @@ const createRentalOrder = async ({
     pickupInfo,
     returnInfo,
     selectedCartItemIds,
+    expectedRentalAmount,
 }) => {
     const response = await api.post("/rentals", {
         pickupInfo,
         returnInfo,
         selectedCartItemIds,
+        expectedRentalAmount,
     })
 
     return response.data.data

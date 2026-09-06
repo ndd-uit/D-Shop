@@ -33,7 +33,7 @@ import {
 import { startPaymentCheckout } from "../utils/paymentCheckout.js"
 
 const getApiMessage = (error, fallback) =>
-    error.response?.data?.message || fallback
+    (error.code === "PAYMENT_AMOUNT_MISMATCH" ? error.message : error.response?.data?.message) || fallback
 
 const getLatestByCreatedAt = (records) =>
     [...records].sort(
@@ -169,7 +169,7 @@ function RentalOrderDetailPage({
         try {
             const result = await createRentalPayment(id)
 
-            if (startPaymentCheckout(result)) {
+            if (startPaymentCheckout(result, { expectedAmount: order.rentalAmount })) {
                 return
             }
 

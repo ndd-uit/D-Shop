@@ -30,8 +30,12 @@ const getRemainingTime = (expiresAt, now) => {
     return `${minutes}:${String(seconds).padStart(2, "0")}`
 }
 
-function CheckoutSuccessDialog({ result, paying, paymentError, onPayNow }) {
+function CheckoutSuccessDialog({ result, paying, paymentError, onPayNow, expectedAmount }) {
     const [now, setNow] = useState(null)
+    const amountMismatch = expectedAmount !== undefined && (
+        Number(result.order.upfrontAmount) !== Number(expectedAmount) ||
+        Number(result.order.rentalAmount) !== Number(expectedAmount)
+    )
 
     useEffect(() => {
         const initialTimerId = window.setTimeout(() => setNow(Date.now()), 0)
@@ -96,19 +100,19 @@ function CheckoutSuccessDialog({ result, paying, paymentError, onPayNow }) {
                     Mã đơn: {result.order.orderId}
                 </p>
 
-                {paymentError && (
+                {(paymentError || amountMismatch) && (
                     <p
                         className="mt-4 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700"
                         role="alert"
                     >
-                        {paymentError}
+                        {paymentError || `Báo giá là ${formatCurrency(expectedAmount)} nhưng đơn được tạo với số tiền khác. Chưa thể thanh toán; vui lòng liên hệ cửa hàng để kiểm tra.`}
                     </p>
                 )}
 
                 <button
                     type="button"
                     onClick={onPayNow}
-                    disabled={paying || expired}
+                    disabled={paying || expired || amountMismatch}
                     className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand-primary px-5 text-sm font-semibold text-[#382d29] transition hover:bg-[#ee9188] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                     {paying ? (

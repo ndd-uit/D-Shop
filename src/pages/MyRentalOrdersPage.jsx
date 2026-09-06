@@ -30,7 +30,7 @@ const STATUS_OPTIONS = [
 ]
 
 const getApiMessage = (error, fallback) =>
-    error.response?.data?.message || fallback
+    (error.code === "PAYMENT_AMOUNT_MISMATCH" ? error.message : error.response?.data?.message) || fallback
 
 function MyRentalOrdersPage() {
     const [orders, setOrders] = useState([])
@@ -121,8 +121,8 @@ function MyRentalOrdersPage() {
 
         try {
             const result = await createRentalPayment(orderId)
-
-            if (startPaymentCheckout(result)) {
+            const order = orders.find((item) => item.orderId === orderId)
+            if (startPaymentCheckout(result, { expectedAmount: order?.rentalAmount })) {
                 return
             }
 

@@ -23,6 +23,7 @@ import { createRentalPayment } from "../services/paymentApi.js"
 import { createRentalOrder } from "../services/rentalApi.js"
 import { getMyProfile, updateMyProfile } from "../services/userApi.js"
 import { startPaymentCheckout } from "../utils/paymentCheckout.js"
+import { assertRentalOrderAmount } from "../utils/paymentAmounts.js"
 import {
     calculateRentalLineTotal,
     calculateRentalTotals,
@@ -142,6 +143,7 @@ function CheckoutPage() {
                 pickupInfo: STORE_INFO.pickupInfo,
                 returnInfo: STORE_INFO.returnInfo,
                 selectedCartItemIds,
+                expectedRentalAmount: totals.rental,
             })
             setCreateResult(result)
         } catch (error) {
@@ -160,9 +162,10 @@ function CheckoutPage() {
         setPaymentError("")
 
         try {
+            assertRentalOrderAmount(createResult.order, totals.rental)
             const result = await createRentalPayment(createResult.order.orderId)
 
-            if (startPaymentCheckout(result)) {
+            if (startPaymentCheckout(result, { expectedAmount: totals.rental })) {
                 return
             }
 
@@ -174,7 +177,7 @@ function CheckoutPage() {
             setPaymentError("Cổng thanh toán chưa trả về đường dẫn thanh toán.")
         } catch (error) {
             setPaymentError(
-                error.response?.data?.message ??
+                (error.code === "PAYMENT_AMOUNT_MISMATCH" ? error.message : error.response?.data?.message) ??
                 "Không thể khởi tạo giao dịch thanh toán.",
             )
         } finally {
@@ -462,6 +465,7 @@ function CheckoutPage() {
                     result={createResult}
                     paying={paying}
                     paymentError={paymentError}
+                    expectedAmount={totals.rental}
                     onPayNow={handlePayNow}
                 />
             )}

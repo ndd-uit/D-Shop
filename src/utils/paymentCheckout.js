@@ -1,3 +1,5 @@
+import { assertPaymentAmount } from "./paymentAmounts.js"
+
 const submitCheckoutForm = (checkout, target) => {
     if (
         checkout?.method !== "POST" ||
@@ -31,7 +33,9 @@ const submitCheckoutForm = (checkout, target) => {
     return true
 }
 
-const startPaymentCheckout = (result, { newTab = false } = {}) => {
+const startPaymentCheckout = (result, { newTab = false, expectedAmount } = {}) => {
+    assertPaymentAmount(result, expectedAmount)
+    if (result.payment.status === "SUCCEEDED") return false
     const target = newTab ? "_blank" : "_self"
 
     if (submitCheckoutForm(result?.checkout, target)) {

@@ -30,7 +30,7 @@ import {
 import { startPaymentCheckout } from "../../utils/paymentCheckout.js"
 
 const getApiMessage = (error, fallback) =>
-    error.response?.data?.message || fallback
+    (error.code === "PAYMENT_AMOUNT_MISMATCH" ? error.message : error.response?.data?.message) || fallback
 
 const actionButtonClass =
     "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#f2a39b] px-5 text-sm font-semibold text-[#453c38] transition hover:bg-[#ee9188] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f2a39b] focus-visible:ring-offset-2 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
@@ -234,7 +234,7 @@ function HandoverForm({ order, onCompleted }) {
                 await onCompleted("Tiền cọc qua cổng thanh toán đã được ghi nhận.")
                 return
             }
-            if (startPaymentCheckout(result, { newTab: true })) {
+            if (startPaymentCheckout(result, { newTab: true, expectedAmount: order.depositAmount })) {
                 setGatewayMessage("Đã tạo giao dịch cọc. Hoàn tất thanh toán ở tab mới, sau đó kiểm tra lại trạng thái.")
                 return
             }
