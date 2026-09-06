@@ -9,11 +9,10 @@ import ManagerSidebar from "../components/manager/ManagerSidebar.jsx"
 import RentalUnitDetailDrawer from "../components/manager/RentalUnitDetailDrawer.jsx"
 import RentalUnitFormModal from "../components/manager/RentalUnitFormModal.jsx"
 import RetireRentalUnitModal from "../components/manager/RetireRentalUnitModal.jsx"
-import { clearAuthToken, getAuthUser, saveAuthUser } from "../services/authStorage.js"
+import { clearAuthToken, getAuthUser } from "../services/authStorage.js"
 import { getManagedGarments } from "../services/garmentApi.js"
 import { changeRentalUnitStatus } from "../services/rentalApi.js"
 import { createRentalUnit, getManagedRentalUnit, getManagedRentalUnits, retireRentalUnit, updateRentalUnit } from "../services/rentalUnitApi.js"
-import { getMyProfile } from "../services/userApi.js"
 
 const STATUS_LABEL = {
     AVAILABLE: "Khả dụng",
@@ -43,13 +42,13 @@ function ManagerRentalUnitsPage() {
     const navigate = useNavigate()
     const location = useLocation()
 
-    const [profile, setProfile] = useState(() => getAuthUser())
+    const [profile] = useState(() => getAuthUser())
     const [forbidden, setForbidden] = useState(false)
     const [units, setUnits] = useState([])
     const [garments, setGarments] = useState([])
     const [loading, setLoading] = useState(true)
+    const [refreshing, setRefreshing] = useState(false)
     const [error, setError] = useState("")
-    const [reload, setReload] = useState(0)
 
     const [keyword, setKeyword] = useState("")
     const [garmentId, setGarmentId] = useState("")
@@ -73,13 +72,8 @@ function ManagerRentalUnitsPage() {
             setLoading(true)
             setError("")
             try {
-                const user = await getMyProfile()
-                if (!active) return
-                if (user.role !== "STORE_MANAGER") { setForbidden(true); return }
                 const [unitData, garmentData] = await Promise.all([getManagedRentalUnits(), getManagedGarments()])
                 if (!active) return
-                saveAuthUser(user)
-                setProfile(user)
                 setUnits(Array.isArray(unitData) ? unitData : [])
                 setGarments(Array.isArray(garmentData) ? garmentData : [])
             } catch (requestError) {
@@ -96,7 +90,29 @@ function ManagerRentalUnitsPage() {
         }
         load()
         return () => { active = false }
-    }, [location.pathname, navigate, reload])
+    }, [location.pathname, navigate])
+
+    const refreshUnits = async () => {
+        if (refreshing) return
+        setRefreshing(true)
+        setError("")
+        try {
+            const unitData = await getManagedRentalUnits()
+            setUnits(Array.isArray(unitData) ? unitData : [])
+        } catch (requestError) {
+            if (requestError.response?.status === 401) {
+                navigate("/login", { replace: true, state: { from: location.pathname } })
+                return
+            }
+            if (requestError.response?.status === 403) {
+                setForbidden(true)
+                return
+            }
+            setError(requestError.response?.data?.message || "Không thể làm mới danh sách kho.")
+        } finally {
+            setRefreshing(false)
+        }
+    }
 
     const summary = useMemo(() => ({
         total: units.length,
@@ -148,8 +164,8 @@ function ManagerRentalUnitsPage() {
                 setUnits((current) => current.map((u) => (u.rentalUnitId === editingUnit.rentalUnitId ? updated : u)))
                 if (detailUnit?.rentalUnitId === editingUnit.rentalUnitId) setDetailUnit(updated)
             } else {
-                await createRentalUnit(payload)
-                setReload((v) => v + 1)
+                const created = await createRentalUnit(payload)
+                setUnits((current) => [...current, created].sort((left, right) => left.assetCode.localeCompare(right.assetCode, "vi")))
             }
             setFormOpen(false); setEditingUnit(undefined)
         } catch (requestError) {
@@ -204,10 +220,10 @@ function ManagerRentalUnitsPage() {
             <ManagerSidebar role={profile?.role} />
             <main className="min-w-0 flex-1">
                 <ManagerHeader
-                    profile={profile} loading={loading}
+                    profile={profile} loading={refreshing}
                     title="Kho cho thuê"
                     subtitle="Quản lý từng RentalUnit vật lý của các mẫu trang phục"
-                    onReload={() => setReload((v) => v + 1)} onLogout={logout}
+                    onReload={refreshUnits} onLogout={logout}
                 />
                 <div className="mx-auto max-w-[1440px] space-y-6 px-5 py-7 sm:px-8 lg:px-12 lg:py-9 xl:px-16">
                     {error && <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>}
