@@ -20,21 +20,30 @@ import {
     startPreparingRentalOrder,
 } from "./rental.service.js";
 import {
-    getGarmentBucket,
-    removeUploadedObjects,
-    uploadGarmentImagesToStorage,
-} from "../garment/garmentImage.storage.js";
+    assertNoClientEvidenceReferences,
+    removeEvidenceUploads,
+    uploadRentalEvidence,
+} from "./rentalEvidence.storage.js";
 
 const cleanupEvidenceUploads = async (uploadedImages) => {
     if (!uploadedImages.length) return;
 
-    await removeUploadedObjects(
-        uploadedImages.map((image) => image.objectPath),
-        { bucket: getGarmentBucket() }
-    );
+    await removeEvidenceUploads(uploadedImages);
 };
 
 const handleEvidenceUploadError = (error, res) => {
+    if (error.message === "EVIDENCE_FILES_REQUIRED") {
+        return res.status(400).json({
+            success: false,
+            message: "Vui lòng tải file ảnh bằng chứng, không gửi đường dẫn ảnh",
+        });
+    }
+    if (["EVIDENCE_BUCKET_UNAVAILABLE", "EVIDENCE_BUCKET_MUST_BE_PRIVATE"].includes(error.message)) {
+        return res.status(503).json({
+            success: false,
+            message: "Kho ảnh bằng chứng riêng tư chưa được cấu hình đúng",
+        });
+    }
     if (error.message === "INVALID_GARMENT_IMAGE_CONTENT") {
         return res.status(400).json({
             success: false,
@@ -49,8 +58,7 @@ const handleEvidenceUploadError = (error, res) => {
         });
     }
 
-    if (error.message === "GARMENT_IMAGE_UPLOAD_FAILED") {
-        console.error(error.cause ?? error);
+    if (error.message === "EVIDENCE_IMAGE_UPLOAD_FAILED") {
         return res.status(502).json({
             success: false,
             message: "Không thể tải ảnh bằng chứng lên dịch vụ lưu trữ",
@@ -216,6 +224,7 @@ const getRentalOrderDetailController = async (
             role: req.user.role,
         });
 
+        res.set("Cache-Control", "private, no-store");
         return res.status(200).json({
             success: true,
             data,
@@ -353,12 +362,13 @@ const prepareRentalReservation = async (req, res) => {
             preparationImages,
         } = req.body ?? {};
 
-        uploadedImages = await uploadGarmentImagesToStorage(
-            req.files ?? []
+        assertNoClientEvidenceReferences(preparationImages);
+        uploadedImages = await uploadRentalEvidence(
+            req.files ?? [], orderId
         );
         const storedPreparationImages = uploadedImages.length
-            ? JSON.stringify(uploadedImages.map((image) => image.publicUrl))
-            : preparationImages;
+            ? JSON.stringify(uploadedImages.map((image) => image.reference))
+            : undefined;
 
         const result = await prepareReservation(
             orderId,
@@ -369,6 +379,9 @@ const prepareRentalReservation = async (req, res) => {
             storedPreparationImages
         );
 
+        if (result.alreadyPrepared) {
+            await cleanupEvidenceUploads(uploadedImages);
+        }
         return res.status(200).json({
             success: true,
             data: result,
@@ -635,15 +648,16 @@ const inspectOrderItem = async (req, res) => {
         const { id, itemId } = req.params;
         const staffId = req.user.userId;
 
-        uploadedImages = await uploadGarmentImagesToStorage(
-            req.files ?? []
+        assertNoClientEvidenceReferences(req.body?.evidenceUrls);
+        uploadedImages = await uploadRentalEvidence(
+            req.files ?? [], id
         );
         const inspectionData = {
             ...(req.body ?? {}),
             ...(uploadedImages.length
                 ? {
                     evidenceUrls: uploadedImages.map(
-                        (image) => image.publicUrl
+                        (image) => image.reference
                     ),
                 }
                 : {}),
@@ -1192,6 +1206,7 @@ const getFeeApprovalRequestsController = async (req, res) => {
             req.query.status || null
         );
 
+        res.set("Cache-Control", "private, no-store");
         return res.status(200).json({
             success: true,
             data,

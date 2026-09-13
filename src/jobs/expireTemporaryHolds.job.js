@@ -1,65 +1,74 @@
 import {
     completeReturnedReservationBlocks,
     expirePendingPaymentOrders,
+    markOverdueRentalOrders,
 } from "../modules/rental/rental.service.js";
 
 const EXPIRE_TEMPORARY_HOLDS_INTERVAL_MS = 60_000;
 
-let intervalId = null;
-let isRunning = false;
+// Injectable dependencies keep tests independent from the database and clock.
+const createRentalLifecycleJob = ({
+    expire = expirePendingPaymentOrders,
+    markOverdue = markOverdueRentalOrders,
+    completeReturned = completeReturnedReservationBlocks,
+    schedule = setInterval,
+    cancel = clearInterval,
+    logger = console,
+} = {}) => {
+    let intervalId = null;
+    let running = null;
 
-const runExpireTemporaryHoldsTick = async (
-    expire = expirePendingPaymentOrders
-) => {
-    if (isRunning) {
-        return {
-            skipped: true,
-        };
-    }
+    const tick = async () => {
+        if (running) return { skipped: true };
+        running = Promise.resolve().then(async () => {
+            const result = {};
+            for (const [task, run] of [
+                ["expirePendingPayments", expire],
+                ["markOverdue", markOverdue],
+                ["completeReturnedBlocks", completeReturned],
+            ]) {
+                try {
+                    Object.assign(result, await run());
+                } catch {
+                    // Never log raw DB errors, payloads or connection strings.
+                    logger.error("Rental lifecycle task failed", { task });
+                    result.failed = true;
+                }
+            }
+            return result;
+        });
+        try {
+            return await running;
+        } finally {
+            running = null;
+        }
+    };
 
-    isRunning = true;
-
-    try {
-        const expiredHolds = await expire();
-        const completedReservationBlocks =
-            await completeReturnedReservationBlocks();
-
-        return {
-            ...expiredHolds,
-            ...completedReservationBlocks,
-        };
-    } catch (error) {
-        console.error(
-            "Không thể tự động xử lý giữ chỗ đã hết hạn",
-            error
-        );
-
-        return {
-            failed: true,
-        };
-    } finally {
-        isRunning = false;
-    }
-};
-
-const startExpireTemporaryHoldsJob = () => {
-    if (intervalId) {
+    const start = () => {
+        if (intervalId !== null) return intervalId;
+        intervalId = schedule(() => { void tick(); }, EXPIRE_TEMPORARY_HOLDS_INTERVAL_MS);
+        intervalId.unref?.();
+        void tick(); // Catch up after a restart.
         return intervalId;
-    }
+    };
 
-    intervalId = setInterval(
-        () => {
-            void runExpireTemporaryHoldsTick();
-        },
-        EXPIRE_TEMPORARY_HOLDS_INTERVAL_MS
-    );
+    const stop = async () => {
+        if (intervalId !== null) cancel(intervalId);
+        intervalId = null;
+        await running;
+    };
 
-    intervalId.unref?.();
-
-    return intervalId;
+    return { tick, start, stop };
 };
+
+const lifecycleJob = createRentalLifecycleJob();
+const runExpireTemporaryHoldsTick = lifecycleJob.tick;
+const startExpireTemporaryHoldsJob = lifecycleJob.start;
+const stopExpireTemporaryHoldsJob = lifecycleJob.stop;
 
 export {
+    createRentalLifecycleJob,
     runExpireTemporaryHoldsTick,
     startExpireTemporaryHoldsJob,
+    stopExpireTemporaryHoldsJob,
 };

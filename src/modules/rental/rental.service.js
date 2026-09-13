@@ -1,4 +1,5 @@
 import prisma from "../../config/prisma.js";
+import { resolveRentalEvidence } from "./rentalEvidence.storage.js";
 import {
     getCart,
     removeCheckedOutCartItems,
@@ -735,9 +736,9 @@ const getRentalOrderDetail = async ({
     orderId,
     userId,
     role,
-}) => {
+}, { db = prisma, resolveEvidence = resolveRentalEvidence } = {}) => {
     const order = await findRentalOrderDetail(
-        orderId
+        orderId, db
     );
 
     if (!order) {
@@ -759,7 +760,7 @@ const getRentalOrderDetail = async ({
         throw new Error("RENTAL_ORDER_FORBIDDEN");
     }
 
-    return order;
+    return resolveEvidence(order, orderId);
 };
 
 const getRentalOrderHistory = async ({
@@ -1956,7 +1957,10 @@ const decideFeeApproval = async (
     return response;
 };
 
-const getFeeApprovalRequests = async (status = null) => {
+const getFeeApprovalRequests = async (
+    status = null,
+    { db = prisma, resolveEvidence = resolveRentalEvidence } = {}
+) => {
     if (
         status &&
         !Object.values(FeeApprovalStatus).includes(status)
@@ -1964,13 +1968,20 @@ const getFeeApprovalRequests = async (status = null) => {
         throw new Error("INVALID_FEE_APPROVAL_STATUS");
     }
 
-    return findFeeApprovalRequests(status);
+    const requests = await findFeeApprovalRequests(status, db);
+    const result = [];
+    for (const request of requests) {
+        result.push({
+            ...request,
+            rentalOrder: await resolveEvidence(request.rentalOrder, request.rentalOrder.orderId),
+        });
+    }
+    return result;
 };
 
 // Đánh dấu các đơn thuê quá hạn
-const markOverdueRentalOrders = async () => {
-    return prisma.$transaction(async (tx) => {
-        const now = new Date();
+const markOverdueRentalOrders = async (now = new Date(), db = prisma) => {
+    return db.$transaction(async (tx) => {
 
         const orders =
             await findOverdueRentalOrders(
@@ -1978,12 +1989,20 @@ const markOverdueRentalOrders = async () => {
                 tx
             );
 
+        let overdueCount = 0;
         for (const order of orders) {
-            await updateRentalOrderStatus(
-                order.orderId,
-                RentalOrderStatus.OVERDUE,
-                tx
-            );
+            // Do not overwrite a return or duplicate another worker's history.
+            const updated = await tx.rentalOrder.updateMany({
+                where: {
+                    orderId: order.orderId,
+                    status: RentalOrderStatus.RENTING,
+                    actualReturnAt: null,
+                    returnDueAt: { lt: now },
+                },
+                data: { status: RentalOrderStatus.OVERDUE },
+            });
+            if (!updated.count) continue;
+            overdueCount += 1;
 
             await createOrderStatusHistory(
                 {
@@ -1999,7 +2018,7 @@ const markOverdueRentalOrders = async () => {
         }
 
         return {
-            overdueCount: orders.length,
+            overdueCount,
         };
     });
 };

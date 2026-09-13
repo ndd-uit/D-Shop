@@ -15,7 +15,11 @@ const REPORT_ORDER_STATUSES = [
     RentalOrderStatus.READY_FOR_PICKUP,
     RentalOrderStatus.RENTING,
     RentalOrderStatus.OVERDUE,
+    RentalOrderStatus.RETURNED,
+    RentalOrderStatus.INSPECTING,
+    RentalOrderStatus.SETTLEMENT_PENDING,
     RentalOrderStatus.COMPLETED,
+    RentalOrderStatus.EXPIRED,
     RentalOrderStatus.NO_SHOW,
     RentalOrderStatus.FULFILLMENT_FAILED,
 ];
