@@ -3,7 +3,7 @@ const validateLateFeePolicy = (policy) => {
         !policy ||
         typeof policy !== "object" ||
         Array.isArray(policy) ||
-        policy.basis !== "RENTAL_AMOUNT" ||
+        !["RENTAL_AMOUNT", "DAILY_RENTAL_AMOUNT"].includes(policy.basis) ||
         policy.timezone !== "Asia/Ho_Chi_Minh" ||
         Number(policy.dueHour) !== 18 ||
         Number(policy.businessStartHour) !== 8 ||

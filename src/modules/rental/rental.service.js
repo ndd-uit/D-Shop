@@ -1412,6 +1412,7 @@ const settleRentalOrder = async (
             lateUnits,
         } = calculateLateFee({
             rentalAmount: order.rentalAmount,
+            rentalStartAt: order.rentalStartAt,
             returnDueAt: order.returnDueAt,
             actualReturnAt: order.actualReturnAt,
             lateFeePolicy:
@@ -2025,6 +2026,7 @@ const markOverdueRentalOrders = async (now = new Date(), db = prisma) => {
 
 const calculateLateFee = ({
     rentalAmount,
+    rentalStartAt,
     returnDueAt,
     actualReturnAt,
     lateFeePolicy,
@@ -2035,7 +2037,7 @@ const calculateLateFee = ({
 
     const policy = lateFeePolicy;
     if (
-        policy.basis !== "RENTAL_AMOUNT" ||
+        !["RENTAL_AMOUNT", "DAILY_RENTAL_AMOUNT"].includes(policy.basis) ||
         policy.timezone !== "Asia/Ho_Chi_Minh" ||
         Number(policy.dueHour) !== 18 ||
         Number(policy.businessStartHour) !== 8 ||
@@ -2066,6 +2068,13 @@ const calculateLateFee = ({
     }
 
     assertReturnWithinBusinessHours(returnedAt);
+
+    // Derive from the order's immutable charged total/dates, never today's
+    // garment prices. Legacy policies retain their original full-period basis.
+    const dailyBasis = policy.basis === "DAILY_RENTAL_AMOUNT";
+    const feeBase = dailyBasis
+        ? amount / getRentalDayCount(rentalStartAt, returnDueAt)
+        : amount;
 
     if (returnedAt <= dueAt) {
         return {
@@ -2117,12 +2126,17 @@ const calculateLateFee = ({
         throw new Error("INVALID_LATE_FEE_INPUT");
     }
 
-    const isMorning = returnedHour < 12;
+    const isMorning = dailyBasis
+        ? returnedHour < 12 || (
+            returnedHour === 12 && getPart("minute") === 0 &&
+            returnedAt.getUTCSeconds() === 0 && returnedAt.getUTCMilliseconds() === 0
+        )
+        : returnedHour < 12;
     const lateUnits = isMorning
         ? overdueDay - 0.5
         : overdueDay;
     const lateFee = Math.floor(
-        amount * lateUnits + 0.5
+        feeBase * lateUnits + 0.5
     );
 
     return {

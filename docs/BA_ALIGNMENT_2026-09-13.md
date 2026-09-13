@@ -46,7 +46,7 @@ Chưa commit, push, deploy hay thực hiện smoke test trên dữ liệu thật
 
 | Mục | Cần chốt |
 | --- | --- |
-| Phí trễ | BA và code hiện cùng lấy toàn bộ rentalAmount làm cơ sở. Nếu đổi sang đơn giá/ngày, cần xác định policy mới và cách áp dụng cho đơn cũ; không âm thầm sửa số tiền lịch sử. |
+| Phí trễ | Đã chốt và sửa local sang tiền thuê/ngày theo policy v3; xem phần bổ sung bên dưới. Cần deploy code rồi kích hoạt v3 trong DB, không sửa policy của đơn cũ. |
 | Quyền thay đồ/xử lý không thể cung ứng | Code đang cho staff thao tác; BA có đoạn giao manager. Chốt vai trò thực hiện/phê duyệt trước khi mở rộng quyền. |
 | Utilization theo từng RentalUnit (FR-REP-04) | Hiện chưa có. Cần xác định đo thời gian thuê thực tế hay thời gian reservation chiếm lịch, có tính buffer/bảo trì hay không và mẫu số là gì. Biểu đồ trạng thái kho không thay thế chỉ số này. |
 | Buffer khả dụng | Cần thống nhất ví dụ BR-13 với công thức ở FR/UC: so khoảng thuê mới với block cũ hay so hai khoảng đã cộng buffer. Không tự đổi thuật toán cấp đồ. |
@@ -59,3 +59,41 @@ RAG/chatbot là tính năng riêng, chưa triển khai trong đợt sửa lỗi 
 - `npm test`: bao gồm các test cũ và test mới cho startup wiring, timer, chống tick trùng, phục hồi sau lỗi, điều kiện UPDATE quá hạn, báo cáo đủ trạng thái, private upload, cleanup, signed URL và quyền sở hữu đơn.
 - `npx prisma validate`: kiểm tra schema, không sửa DB.
 - Chưa kiểm thử luồng Storage bằng tài khoản Supabase thật; cần hoàn tất checklist deploy phía trên.
+
+## Bổ sung: phí trễ theo ngày — policy v3.0
+
+Đã chốt: cơ sở phí trễ là **tổng tiền thuê một ngày của toàn bộ đồ trong đơn**, không phải tổng tiền thuê cả kỳ.
+
+Nội dung thay thế cho P07, BR63.B/C, FR-SET14/15 và UC-RENT05 trong BA:
+
+- `rentalDays`: số ngày lịch Việt Nam, tính cả ngày nhận và ngày trả dự kiến; không gồm buffer.
+- `dailyRentalAmount = rentalAmount / rentalDays`, dùng số tiền và thời gian đã lưu trên đơn, không lấy giá Garment hiện tại.
+- Trả đúng hạn: phí trễ bằng 0.
+- Gọi `d` là số ngày lịch giữa ngày trả dự kiến và ngày trả thực tế. Trong ngày trễ thứ `d`, trả từ 08:00 đến đúng 12:00: hệ số `d − 0,5`; sau 12:00 đến 18:00: hệ số `d`.
+- `lateFee = roundHalfUp(dailyRentalAmount × hệ số)`, chỉ làm tròn một lần đến đồng cuối cùng.
+- Phí kiểm tra/hư hỏng vẫn tính riêng rồi cộng vào phí trễ; không dùng tiền cọc làm cơ sở.
+- Không thay đổi ràng buộc giờ nhận trả của cửa hàng 08:00–18:00.
+
+Ví dụ: 4 ngày × 80.000đ = 320.000đ. Sáng hôm sau/đúng 12:00: 40.000đ; sau 12:00: 80.000đ. Sáng ngày trễ thứ hai: 120.000đ; chiều: 160.000đ.
+
+### Bảo toàn đơn lịch sử
+
+- Policy mới dùng `basis: DAILY_RENTAL_AMOUNT`; policy cũ `RENTAL_AMOUNT` vẫn tính theo toàn kỳ và giữ ranh giới 12:00 cũ.
+- Không sửa `policyId`, tổng tiền, khoản thu/hoàn hay kết quả quyết toán của đơn cũ.
+- Script tạo v3 tại thời điểm chạy, đóng hiệu lực policy trước đó bằng `effectiveTo`; không sửa công thức cũ. Kế thừa holdDuration, approvalThreshold và damageFeePolicy hiện hành.
+- Script chạy trong transaction Serializable, chạy lại không tạo trùng v3. Nếu đã có policy lên lịch tương lai hoặc timeline xung đột thì từ chối để review thủ công.
+- UI quản lý hiển thị rõ cơ sở cả kỳ/ngày và mốc 12:00 theo policy, không hiển thị chung chung “giá thuê”.
+
+### Triển khai bổ sung phí trễ
+
+1. Deploy backend có hỗ trợ cả hai basis trước. Deploy frontend để cập nhật mô tả policy.
+2. Sau khi backend mới hoạt động, chạy **một lần**, trong thư mục server với env trỏ đúng DB deploy:
+
+   ```bash
+   npm run policy:v3
+   ```
+
+3. Kiểm tra output version `v3.0`, basis `DAILY_RENTAL_AMOUNT`, thời điểm hiệu lực; màn hình policy phải thể hiện đúng phiên bản đang hoạt động. Nếu output `alreadyExists: true`, kiểm tra timeline hiện tại, không hiểu mặc định là v3 vẫn active.
+4. Đơn tạo sau khi kích hoạt phải gắn policy mới; đơn cũ giữ policy đã gắn. Test ví dụ 4 ngày nêu trên với đơn mới.
+
+Không có schema migration mới. Không chạy lại seed/reset hay script policy:v2. **Chỉ deploy code mà chưa kích hoạt policy trong DB thì đơn mới vẫn có thể lấy policy cũ.** Script kích hoạt chưa được chạy trên DB thật trong lần sửa local này. BA.docx chưa chỉnh trực tiếp; nội dung thay thế ở trên để đưa vào tài liệu gốc.

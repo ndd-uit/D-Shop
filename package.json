@@ -9,7 +9,8 @@
     "start": "node src/app.js",
     "postinstall": "prisma generate",
     "test": "node --test",
-    "policy:v2": "node prisma/apply-rental-policy-v2.mjs"
+    "policy:v2": "node prisma/apply-rental-policy-v2.mjs",
+    "policy:v3": "node prisma/apply-rental-policy-v3.mjs"
   },
   "keywords": [],
   "author": "",
