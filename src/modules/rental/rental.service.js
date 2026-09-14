@@ -1171,7 +1171,8 @@ const inspectRentalOrderItem = async (
         description,
         evidenceUrls,
         proposedCharge,
-    }
+    },
+    db = prisma
 ) => {
     const normalizedCondition = normalizeRequiredString(
         condition,
@@ -1214,7 +1215,7 @@ const inspectRentalOrderItem = async (
         throw new Error("INVALID_ISSUE_TYPE");
     }
 
-    return prisma.$transaction(async (tx) => {
+    return db.$transaction(async (tx) => {
         // 1. Kiểm tra Order
         const order = await findRentalOrderById(
             orderId,
@@ -1248,19 +1249,22 @@ const inspectRentalOrderItem = async (
             throw new Error("ITEM_ALREADY_INSPECTED");
         }
 
-        // 4. Tìm Reservation đang ACTIVE
-        const reservation =
-            orderItem.reservations.find(
+        // Buffer completion releases the calendar, not the obligation to inspect.
+        // RELEASED replacements and EXPIRED holds were never handed over.
+        const candidates =
+            orderItem.reservations.filter(
                 (reservation) =>
                     reservation.status ===
-                    ReservationStatus.ACTIVE
+                    ReservationStatus.ACTIVE ||
+                    reservation.status === ReservationStatus.COMPLETED
             );
 
-        if (!reservation) {
+        if (!order.actualReturnAt || candidates.length !== 1) {
             throw new Error(
-                "ACTIVE_RESERVATION_NOT_FOUND"
+                "INSPECTION_RESERVATION_NOT_FOUND"
             );
         }
+        const [reservation] = candidates;
 
         // 5. Unit phải đang chờ kiểm tra trả
         if (

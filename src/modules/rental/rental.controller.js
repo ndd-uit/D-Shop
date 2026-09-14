@@ -707,10 +707,10 @@ const inspectOrderItem = async (req, res) => {
             });
         }
 
-        if (error.message === "ACTIVE_RESERVATION_NOT_FOUND") {
+        if (error.message === "INSPECTION_RESERVATION_NOT_FOUND") {
             return res.status(409).json({
                 success: false,
-                message: "Không tìm thấy đặt chỗ hoạt động",
+                message: "Không xác định được duy nhất đặt chỗ đã nhận trả để kiểm tra",
             });
         }
 

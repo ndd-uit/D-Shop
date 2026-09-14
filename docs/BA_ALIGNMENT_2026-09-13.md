@@ -1,5 +1,13 @@
 # Đồng bộ BA và code — đợt sửa kỹ thuật 13/09/2026
 
+## Sửa bổ sung 14/09: kiểm tra đồ sau khi hết buffer
+
+Job kết thúc reservation sau khi đồ đã nhận trả và hết buffer có thể chạy trước lúc staff lưu kiểm tra. Trước đây bước kiểm tra chỉ nhận ACTIVE nên báo lỗi dù đơn đang INSPECTING.
+
+Đã sửa bước kiểm tra: chấp nhận duy nhất một reservation ACTIVE hoặc COMPLETED của đúng item trong đơn đã ghi actualReturnAt. Vẫn yêu cầu đơn INSPECTING, RentalUnit RETURN_INSPECTION và chưa có InspectionResult. Không chọn reservation RELEASED/EXPIRED/CONFIRMED/TEMPORARY_HOLD; nếu có nhiều ứng viên thì từ chối thay vì chọn tùy tiện. Giữ nguyên yêu cầu bằng chứng khi đề xuất phí.
+
+Đơn đang mắc lỗi có thể thử lưu lại sau khi backend mới deploy, miễn còn đủ điều kiện trên. Không đổi COMPLETED về ACTIVE, không reset dữ liệu, không chạy lại policy. Lần sửa này chỉ cần deploy backend; chưa deploy hay sửa DB thật. Bộ test giả lập kiểm tra chuỗi nhận trả quá hạn → job hết buffer → kiểm tra, cùng các trường hợp từ chối.
+
 ## Phạm vi đã sửa
 
 ### 1. Tự động cập nhật vòng đời đơn thuê
