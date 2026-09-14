@@ -34,7 +34,8 @@ const getPolicyStatus = (policy, activePolicyId, now) => {
 
 const lateFeeSummary = (policy) => {
     if (!policy) return "Chưa cấu hình"
-    return `Trước ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: (ngày trễ − 0,5) × giá thuê; từ ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: ngày trễ × giá thuê`
+    if (policy.basis === "DAILY_RENTAL_AMOUNT") return "Đến 12:00: (ngày trễ − 0,5) × tiền thuê/ngày; sau 12:00: ngày trễ × tiền thuê/ngày"
+    return `Trước ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: (ngày trễ − 0,5) × tổng tiền thuê cả kỳ; từ ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: ngày trễ × tổng tiền thuê cả kỳ`
 }
 
 function ManagerPoliciesPage() {

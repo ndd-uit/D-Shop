@@ -9,8 +9,9 @@ const toDateTimeLocal = (date) => {
 
 const lateFeeDescription = (policy) => {
     if (!policy) return "Chưa cấu hình"
+    if (policy.basis === "DAILY_RENTAL_AMOUNT") return "Đến 12:00: (số ngày trễ − 0,5) × tiền thuê/ngày; sau 12:00: số ngày trễ × tiền thuê/ngày. Tiền thuê/ngày = tổng tiền thuê đã chốt ÷ số ngày thuê."
 
-    return `Trước ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: (số ngày trễ − 0,5) × giá thuê; từ ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: số ngày trễ × giá thuê.`
+    return `Trước ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: (số ngày trễ − 0,5) × tổng tiền thuê cả kỳ; từ ${String(policy.halfDayCutoffHour).padStart(2, "0")}:00: số ngày trễ × tổng tiền thuê cả kỳ.`
 }
 
 function PolicyVersionFormModal({ currentPolicy, saving, error, onClose, onSubmit }) {
