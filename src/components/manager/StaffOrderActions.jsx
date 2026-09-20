@@ -421,21 +421,13 @@ function PreHandoverExceptions({ order, onCompleted }) {
     )
 }
 
-function NoShowAction({ order, onCompleted }) {
+function NoShowAction({ order, onCompleted, currentTime }) {
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
-    const [now, setNow] = useState(() => Date.now())
     const pickupAt = new Date(order.rentalStartAt).getTime()
     const noShowCutoff = Number.isFinite(pickupAt) ? pickupAt + 10 * 60 * 60 * 1000 : Number.POSITIVE_INFINITY
     const depositNotCollected = Number(order.collectedDepositAmount ?? 0) === 0 && !order.depositCollectedAt
-    const canMarkNoShow = now > noShowCutoff && !order.actualPickupAt && depositNotCollected
-    const waitingForCutoff = now <= noShowCutoff && !order.actualPickupAt && depositNotCollected
-
-    useEffect(() => {
-        if (!waitingForCutoff) return undefined
-        const timer = window.setInterval(() => setNow(Date.now()), 1000)
-        return () => window.clearInterval(timer)
-    }, [waitingForCutoff])
+    const canMarkNoShow = currentTime > noShowCutoff && !order.actualPickupAt && depositNotCollected
 
     const submit = async () => {
         if (!canMarkNoShow) return
@@ -617,7 +609,20 @@ function SettlementActions({ order, onCompleted }) {
 function StaffOrderActions({ order, onCompleted }) {
     const [submitting, setSubmitting] = useState(false)
     const [error, setError] = useState("")
+    const [currentTime, setCurrentTime] = useState(() => Date.now())
     const uninspectedItems = order.items.filter((item) => !item.inspectionResult)
+    const pickupAt = new Date(order.rentalStartAt).getTime()
+    const noShowCutoff = Number.isFinite(pickupAt)
+        ? pickupAt + 10 * 60 * 60 * 1000
+        : Number.POSITIVE_INFINITY
+    const isPreHandover = ["CONFIRMED", "PREPARING", "READY_FOR_PICKUP"].includes(order.status)
+    const pickupWindowEnded = currentTime > noShowCutoff
+
+    useEffect(() => {
+        if (!isPreHandover || pickupWindowEnded) return undefined
+        const timer = window.setInterval(() => setCurrentTime(Date.now()), 1000)
+        return () => window.clearInterval(timer)
+    }, [isPreHandover, pickupWindowEnded, noShowCutoff])
 
     const simpleAction = async (action, successMessage, fallback) => {
         setSubmitting(true)
@@ -640,7 +645,11 @@ function StaffOrderActions({ order, onCompleted }) {
         </p>
     )
 
-    if (order.status === "CONFIRMED") {
+    if (isPreHandover && pickupWindowEnded) {
+        title = "Xử lý khách không đến nhận"
+        icon = AlertTriangle
+        content = <NoShowAction order={order} onCompleted={onCompleted} currentTime={currentTime} />
+    } else if (order.status === "CONFIRMED") {
         title = "Chuẩn bị đơn"
         icon = PackageCheck
         content = (
@@ -662,7 +671,7 @@ function StaffOrderActions({ order, onCompleted }) {
     } else if (order.status === "READY_FOR_PICKUP") {
         title = "Bàn giao & thu cọc"
         icon = HandCoins
-        content = <><HandoverForm order={order} onCompleted={onCompleted} /><PreHandoverExceptions order={order} onCompleted={onCompleted} /><NoShowAction order={order} onCompleted={onCompleted} /></>
+        content = <><HandoverForm order={order} onCompleted={onCompleted} /><PreHandoverExceptions order={order} onCompleted={onCompleted} /><NoShowAction order={order} onCompleted={onCompleted} currentTime={currentTime} /></>
     } else if (["RENTING", "OVERDUE"].includes(order.status)) {
         title = "Nhận trả trang phục"
         icon = ScanSearch
