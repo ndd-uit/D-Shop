@@ -20,6 +20,7 @@ import {
 } from "../prisma/rental-policy-v2.js";
 import {
     assertNoShowEligible,
+    assertPickupWindowOpen,
     assertReturnWithinBusinessHours,
     getPickupWindowEndAt,
     getReservationBlockPeriod,
@@ -116,6 +117,56 @@ test("NO_SHOW is allowed only after the Vietnam pickup window has ended", () => 
         order,
         "2026-08-28T11:00:00.001Z"
     ));
+});
+
+test("pre-handover work stops after the Vietnam pickup window ends", () => {
+    const order = {
+        rentalStartAt: "2026-08-28T01:00:00.000Z",
+    };
+
+    assert.doesNotThrow(() => assertPickupWindowOpen(
+        order,
+        "2026-08-28T11:00:00.000Z"
+    ));
+    assert.throws(
+        () => assertPickupWindowOpen(
+            order,
+            "2026-08-28T11:00:00.001Z"
+        ),
+        /PICKUP_WINDOW_ENDED/
+    );
+});
+
+test("NO_SHOW accepts every unhanded pre-handover status", () => {
+    const order = {
+        rentalStartAt: "2026-08-28T01:00:00.000Z",
+        actualPickupAt: null,
+        collectedDepositAmount: 0,
+        depositCollectedAt: null,
+        depositCollectionMethod: null,
+    };
+    const afterPickupWindow = "2026-08-28T11:00:00.001Z";
+
+    for (const status of [
+        "CONFIRMED",
+        "PREPARING",
+        "READY_FOR_PICKUP",
+    ]) {
+        assert.doesNotThrow(() => assertNoShowEligible(
+            { ...order, status },
+            afterPickupWindow
+        ));
+    }
+
+    for (const status of ["PENDING_PAYMENT", "RENTING", "OVERDUE"]) {
+        assert.throws(
+            () => assertNoShowEligible(
+                { ...order, status },
+                afterPickupWindow
+            ),
+            /INVALID_ORDER_STATUS/
+        );
+    }
 });
 
 test("NO_SHOW rejects picked-up orders and every recorded deposit marker", () => {

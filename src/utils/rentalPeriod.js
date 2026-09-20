@@ -74,8 +74,26 @@ const getPickupWindowEndAt = (rentalStartAt) => {
     );
 };
 
+const assertPickupWindowOpen = (order, value = new Date()) => {
+    const now = new Date(value);
+
+    if (Number.isNaN(now.getTime())) {
+        throw new Error("INVALID_PICKUP_TIME");
+    }
+
+    if (now > getPickupWindowEndAt(order.rentalStartAt)) {
+        throw new Error("PICKUP_WINDOW_ENDED");
+    }
+
+    return now;
+};
+
 const assertNoShowEligible = (order, value = new Date()) => {
-    if (order.status !== "READY_FOR_PICKUP") {
+    if (![
+        "CONFIRMED",
+        "PREPARING",
+        "READY_FOR_PICKUP",
+    ].includes(order.status)) {
         throw new Error("INVALID_ORDER_STATUS");
     }
 
@@ -204,6 +222,7 @@ const getReservationBlockPeriod = (
 
 export {
     assertNoShowEligible,
+    assertPickupWindowOpen,
     assertReturnWithinBusinessHours,
     getPickupWindowEndAt,
     getRentalDayCount,

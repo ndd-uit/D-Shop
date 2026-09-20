@@ -335,6 +335,13 @@ const startPreparingOrder = async (req, res) => {
             });
         }
 
+        if (error.message === "PICKUP_WINDOW_ENDED") {
+            return res.status(409).json({
+                success: false,
+                message: "Đã qua 18:00 ngày nhận; hãy ghi nhận khách không đến nhận",
+            });
+        }
+
         console.error(error);
 
         return res.status(500).json({
@@ -419,6 +426,13 @@ const prepareRentalReservation = async (req, res) => {
             });
         }
 
+        if (error.message === "PICKUP_WINDOW_ENDED") {
+            return res.status(409).json({
+                success: false,
+                message: "Đã qua 18:00 ngày nhận; không thể tiếp tục chuẩn bị đơn",
+            });
+        }
+
         if (error.message === "INVALID_RESERVATION_STATUS") {
             return res.status(409).json({
                 success: false,
@@ -482,6 +496,13 @@ const handoverOrder = async (req, res) => {
             return res.status(409).json({
                 success: false,
                 message: "Đơn thuê phải ở trạng thái sẵn sàng để nhận",
+            });
+        }
+
+        if (error.message === "PICKUP_WINDOW_ENDED") {
+            return res.status(409).json({
+                success: false,
+                message: "Đã qua 18:00 ngày nhận; không thể bàn giao đơn",
             });
         }
 
@@ -1255,7 +1276,7 @@ const markNoShowController = async (req, res) => {
         if (error.message === "INVALID_ORDER_STATUS") {
             return res.status(409).json({
                 success: false,
-                message: "Chỉ đơn sẵn sàng nhận mới có thể đánh dấu không đến nhận",
+                message: "Chỉ đơn chưa bàn giao mới có thể đánh dấu không đến nhận",
             });
         }
         if (error.message === "DEPOSIT_ALREADY_COLLECTED") {

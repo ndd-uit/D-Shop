@@ -79,6 +79,7 @@ import { UUID_REGEX } from "../../utils/validation.js";
 import { calculateSettlementAmounts } from "../../utils/settlement.js";
 import {
     assertNoShowEligible,
+    assertPickupWindowOpen,
     assertReturnWithinBusinessHours,
     getRentalDayCount,
 } from "../../utils/rentalPeriod.js";
@@ -512,13 +513,14 @@ const startPreparingRentalOrder = async (orderId, staffId) => {
             throw new Error("INVALID_ORDER_STATUS");
         }
 
+        const now = assertPickupWindowOpen(order);
         const updateOrder = await updateRentalOrderStatus(orderId, RentalOrderStatus.PREPARING, tx);
         await createOrderStatusHistory({
             rentalOrderId: orderId,
             oldStatus: RentalOrderStatus.CONFIRMED,
             newStatus: RentalOrderStatus.PREPARING,
             changedBy: staffId,
-            changedAt: new Date(),
+            changedAt: now,
             reason: "Staff started preparing rental order",
         }, tx);
         return updateOrder;
@@ -566,6 +568,8 @@ const prepareReservation = async (
         if (order.status !== RentalOrderStatus.PREPARING) {
             throw new Error("INVALID_ORDER_STATUS");
         }
+
+        assertPickupWindowOpen(order);
 
         // 3. Tìm Reservation thuộc đúng Order
         const reservation =
@@ -872,6 +876,8 @@ const handoverRentalOrder = async (
         ) {
             throw new Error("INVALID_ORDER_STATUS");
         }
+
+        assertPickupWindowOpen(order);
 
         if (confirmations.length !== order.items.length) {
             throw new Error("HANDOVER_ITEM_MISMATCH");
@@ -2481,7 +2487,7 @@ const markRentalOrderNoShow = async (
     await createOrderStatusHistory(
         {
             rentalOrderId: orderId,
-            oldStatus: RentalOrderStatus.READY_FOR_PICKUP,
+            oldStatus: order.status,
             newStatus: RentalOrderStatus.NO_SHOW,
             changedBy: staffId,
             changedAt: now,
