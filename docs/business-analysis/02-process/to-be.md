@@ -2,6 +2,10 @@
 
 TO-BE mô tả quy trình thuê trang phục sau khi triển khai hệ thống D-SHOP.
 
+![TO-BE Rental Process](../assets/diagrams/to-be-activity.svg)
+
+[PlantUML source](../assets/diagrams/to-be-activity.puml)
+
 ## Main Flow
 
 1. Customer tìm kiếm trang phục và chọn thời gian thuê.
