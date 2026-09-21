@@ -348,7 +348,21 @@ test('chatbot completes a whitelisted tool-calling round', async () => {
                 }
                 assert.equal(
                     contents.at(-1).role,
-                    'function'
+                    'user'
+                );
+                assert.deepEqual(
+                    contents.at(-1).parts,
+                    [{
+                        functionResponse: {
+                            name:
+                                'list_my_rental_orders',
+                            response: {
+                                result: [{
+                                    orderId: UUID,
+                                }],
+                            },
+                        },
+                    }]
                 );
                 return {
                     content: {

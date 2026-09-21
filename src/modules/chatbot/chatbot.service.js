@@ -171,7 +171,7 @@ const createChatbotService = ({
             }
 
             contents.push({
-                role: 'function',
+                role: 'user',
                 parts: responseParts,
             });
         }
