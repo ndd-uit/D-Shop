@@ -15,6 +15,7 @@ import staffRoutes from "./modules/staff/staff.routes.js";
 import categoryRoutes from "./modules/garment/category.routes.js";
 import rentalUnitRoutes from "./modules/garment/rentalUnit.routes.js";
 import operationsRoutes from "./modules/operations/operations.routes.js";
+import chatbotRoutes from './modules/chatbot/chatbot.routes.js';
 import { startExpireTemporaryHoldsJob } from "./jobs/expireTemporaryHolds.job.js";
 dotenv.config();
 
@@ -58,6 +59,7 @@ app.use('/api/staff', staffRoutes)
 app.use('/api/categories', categoryRoutes)
 app.use('/api/rental-units', rentalUnitRoutes)
 app.use('/api/operations', operationsRoutes)
+app.use('/api/chatbot', chatbotRoutes)
 
 app.get('/api/health', (req, res) => {
     res.json({
