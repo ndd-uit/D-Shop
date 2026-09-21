@@ -1,0 +1,162 @@
+@startuml
+title D-SHOP — TO-BE Rental Process
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam activity {
+    BackgroundColor #FFFFFF
+    BorderColor #9A7F73
+    FontColor #3F3530
+    DiamondBackgroundColor #FFF2E8
+    DiamondBorderColor #C28E80
+}
+
+|Customer|
+start
+:Chọn trang phục và thời gian thuê;
+
+|D-SHOP|
+:Kiểm tra availability theo RentalUnit;
+if (Đủ RentalUnit khả dụng?) then (Có)
+    |Customer|
+    :Chọn item và xác nhận checkout;
+
+    |D-SHOP|
+    :Kiểm tra lại availability;
+    if (Giữ được toàn bộ item đã chọn?) then (Có)
+        :Tạo RentalOrder PENDING_PAYMENT;
+        :Tạo Reservation TEMPORARY_HOLD;
+
+        |Customer|
+        :Thanh toán tiền thuê;
+
+        |Payment Service|
+        :Xử lý và gửi kết quả;
+
+        |D-SHOP|
+        if (Thanh toán thành công\nvà hold còn hiệu lực?) then (Có)
+            :Order và Reservation = CONFIRMED;
+
+            |Rental Staff|
+            :Bắt đầu chuẩn bị đơn;
+
+            |D-SHOP|
+            :RentalOrder = PREPARING;
+
+            |Rental Staff|
+            :Kiểm tra RentalUnit và phụ kiện;
+            if (RentalUnit đủ điều kiện?) then (Có)
+                :Hoàn tất chuẩn bị;
+            else (Không)
+                :Yêu cầu RentalUnit thay thế;
+                |D-SHOP|
+                :Kiểm tra unit thay thế trong cùng blocked interval;
+                if (Có unit thay thế?) then (Có)
+                    :Release Reservation cũ;
+                    :Tạo Reservation mới CONFIRMED;
+                    |Rental Staff|
+                    :Chuẩn bị unit thay thế;
+                else (Không)
+                    :Ghi nhận FULFILLMENT_FAILED;
+                    |D-SHOP|
+                    :Release Reservation và ghi nhận hoàn rentalAmount;
+                    stop
+                endif
+            endif
+
+            |D-SHOP|
+            :RentalOrder = READY_FOR_PICKUP;
+            if (Qua 18:00 ngày nhận\nvà chưa pickup/chưa thu cọc?) then (Có)
+                |Rental Staff|
+                :Ghi nhận NO_SHOW;
+                |D-SHOP|
+                :Release Reservation;
+                :RentalOrder = NO_SHOW;
+                stop
+            else (Không)
+                |Customer|
+                :Đến nhận trang phục;
+                |Rental Staff|
+                :Đối chiếu Customer/CCCD;
+                :Thu và ghi nhận tiền cọc;
+                :Xác nhận bàn giao;
+                |D-SHOP|
+                :Ghi actualPickupAt;
+                :Reservation = ACTIVE;
+                :RentalUnit = RENTED;
+                :RentalOrder = RENTING;
+
+                if (Quá returnDueAt và chưa trả?) then (Có)
+                    :RentalOrder = OVERDUE;
+                else (Không)
+                endif
+
+                |Customer|
+                :Hoàn trả trang phục;
+                |Rental Staff|
+                :Tiếp nhận và kiểm tra từng unit;
+                |D-SHOP|
+                :Ghi actualReturnAt;
+                :Order = INSPECTING;
+                :Unit = RETURN_INSPECTION;
+
+                |Rental Staff|
+                :Lưu InspectionResult và bằng chứng;
+                |D-SHOP|
+                :Order = SETTLEMENT_PENDING;
+                :Tính lateFee và additionalCharge;
+
+                if (Cần Manager phê duyệt?) then (Có)
+                    |Store Manager|
+                    :Phê duyệt / điều chỉnh / từ chối phí;
+                else (Không)
+                endif
+
+                |D-SHOP|
+                :Tính tiền hoàn cọc / cần thu thêm;
+                if (Cần thu thêm?) then (Có)
+                    |Customer|
+                    :Thanh toán khoản bổ sung;
+                    |Rental Staff|
+                    :Ghi nhận khoản đã thu;
+                else (Không)
+                endif
+
+                |D-SHOP|
+                if (Có tiền cần hoàn?) then (Có)
+                    :Tạo/cập nhật Refund;
+                    |Rental Staff|
+                    :Ghi nhận kết quả hoàn;
+                else (Không)
+                endif
+
+                |D-SHOP|
+                :RentalOrder = COMPLETED;
+                :Giữ Reservation đến blockedEndAt;
+                if (Đã trả unit và now >= blockedEndAt?) then (Có)
+                    :Reservation = COMPLETED;
+                else (Chưa)
+                    :Lifecycle job xử lý sau;
+                endif
+                stop
+            endif
+        else (Không)
+            :Ghi nhận thanh toán thất bại\nhoặc expire hold;
+            stop
+        endif
+    else (Không)
+        :Rollback checkout;
+        |Customer|
+        :Nhận thông báo conflict;
+        stop
+    endif
+else (Không)
+    |Customer|
+    :Nhận thông báo không khả dụng;
+    stop
+endif
+
+@enduml

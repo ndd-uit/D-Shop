@@ -1,0 +1,358 @@
+@startuml
+title D-SHOP — Domain Model
+
+left to right direction
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam class {
+    BackgroundColor #FFFFFF
+    BorderColor #9A7F73
+    FontColor #3F3530
+}
+skinparam enum {
+    BackgroundColor #FFF2E8
+    BorderColor #C29B8D
+    FontColor #3F3530
+}
+
+' =========================================================
+' Core classes
+' =========================================================
+
+class RentalPolicy {
+    - policyId: UUID
+    - version: String
+    - effectiveFrom: DateTime
+    - effectiveTo: DateTime?
+    - holdDuration: Integer
+    - approvalThreshold: Decimal
+    - lateFeePolicy: Json
+    - damageFeePolicy: String
+}
+
+class User {
+    - userId: UUID
+    - fullName: String
+    - email: String
+    - phone: String?
+    - nationalId: String?
+    - role: UserRole
+    - isActive: Boolean
+}
+
+class RentalCart {
+    - cartId: UUID
+    - rentalStartAt: DateTime?
+    - returnDueAt: DateTime?
+    - updatedAt: DateTime
+}
+
+class RentalCartItem {
+    - cartItemId: UUID
+    - requestedSize: String
+    - quantity: Integer
+}
+
+class Category {
+    - categoryId: UUID
+    - name: String
+    - description: String?
+    - isActive: Boolean
+}
+
+class Garment {
+    - garmentId: UUID
+    - name: String
+    - description: String?
+    - color: String?
+    - rentalPrice: Decimal
+    - depositAmount: Decimal
+    - isActive: Boolean
+}
+
+class RentalUnit {
+    - rentalUnitId: UUID
+    - assetCode: String
+    - size: String
+    - condition: String?
+    - status: RentalUnitStatus
+}
+
+class AvailabilityBlock {
+    - blockId: UUID
+    - type: BlockType
+    - startAt: DateTime
+    - endAt: DateTime
+    - reason: String
+    - status: String?
+}
+
+class RentalOrder {
+    - orderId: UUID
+    - rentalStartAt: DateTime
+    - returnDueAt: DateTime
+    - actualPickupAt: DateTime?
+    - actualReturnAt: DateTime?
+    - status: RentalOrderStatus
+
+    - rentalAmount: Decimal
+    - depositAmount: Decimal
+    - upfrontAmount: Decimal
+    - collectedDepositAmount: Decimal
+    - depositCollectionMethod: DepositCollectionMethod?
+    - additionalCharge: Decimal
+    - depositRefundAmount: Decimal
+    - additionalPayment: Decimal
+    - finalCharge: Decimal?
+    - totalPaid: Decimal
+    - totalRefunded: Decimal
+    - netCollected: Decimal
+}
+
+class RentalOrderItem {
+    - orderItemId: UUID
+    - requestedSize: String
+}
+
+class Reservation {
+    - reservationId: UUID
+    - status: ReservationStatus
+    - blockedStartAt: DateTime
+    - blockedEndAt: DateTime
+    - holdExpiresAt: DateTime?
+    - preparedAt: DateTime?
+    - replacementReason: String?
+    - replacedAt: DateTime?
+}
+
+class Payment {
+    - paymentId: UUID
+    - purpose: PaymentPurpose
+    - amount: Decimal
+    - status: PaymentStatus
+    - transactionRef: String?
+    - paidAt: DateTime?
+}
+
+class Refund {
+    - refundId: UUID
+    - type: RefundType
+    - amount: Decimal
+    - reason: String?
+    - status: RefundStatus
+    - transactionRef: String?
+    - completedAt: DateTime?
+}
+
+class InspectionResult {
+    - inspectionResultId: UUID
+    - condition: String
+    - accessoriesStatus: String?
+    - issueType: String?
+    - description: String?
+    - evidenceUrls: String?
+    - proposedCharge: Decimal
+    - inspectedAt: DateTime
+}
+
+class FeeApprovalRequest {
+    - feeApprovalRequestId: UUID
+    - proposedAmount: Decimal
+    - finalAmount: Decimal?
+    - status: FeeApprovalStatus
+    - decisionReason: String?
+    - decidedAt: DateTime?
+}
+
+class RentalOrderStatusHistory {
+    - historyId: UUID
+    - oldStatus: RentalOrderStatus?
+    - newStatus: RentalOrderStatus
+    - changedAt: DateTime
+    - reason: String?
+}
+
+class RentalUnitStatusHistory {
+    - historyId: UUID
+    - oldStatus: RentalUnitStatus?
+    - newStatus: RentalUnitStatus
+    - changedAt: DateTime
+    - reason: String?
+}
+
+
+' =========================================================
+' Enums
+' =========================================================
+
+enum UserRole {
+    CUSTOMER
+    RENTAL_STAFF
+    STORE_MANAGER
+}
+
+enum RentalOrderStatus {
+    PENDING_PAYMENT
+    CONFIRMED
+    PREPARING
+    READY_FOR_PICKUP
+    RENTING
+    OVERDUE
+    RETURNED
+    INSPECTING
+    SETTLEMENT_PENDING
+    COMPLETED
+    EXPIRED
+    NO_SHOW
+    FULFILLMENT_FAILED
+}
+
+enum ReservationStatus {
+    TEMPORARY_HOLD
+    CONFIRMED
+    ACTIVE
+    EXPIRED
+    RELEASED
+    COMPLETED
+}
+
+enum RentalUnitStatus {
+    AVAILABLE
+    PREPARING
+    RENTED
+    RETURN_INSPECTION
+    CLEANING
+    MAINTENANCE
+    DAMAGED
+    RETIRED
+}
+
+enum PaymentPurpose {
+    RENTAL
+    DEPOSIT
+}
+
+enum PaymentStatus {
+    PENDING
+    SUCCEEDED
+    FAILED
+}
+
+enum RefundType {
+    DEPOSIT_RETURN
+    RENTAL_REFUND
+}
+
+enum RefundStatus {
+    PENDING
+    SUCCEEDED
+    FAILED
+}
+
+enum DepositCollectionMethod {
+    PAYMENT_GATEWAY
+    DIRECT
+}
+
+enum FeeApprovalStatus {
+    PENDING
+    APPROVED
+    ADJUSTED
+    REJECTED
+}
+
+enum BlockType {
+    CLEANING
+    MAINTENANCE
+    REPAIR
+    MANUAL_BLOCK
+}
+
+
+' =========================================================
+' Main relationships
+' =========================================================
+
+User "1" -- "0..1" RentalCart : owns
+User "1" -- "0..*" RentalOrder : places
+
+RentalPolicy "1" -- "0..*" RentalOrder : applies to
+
+RentalCart "1" -- "0..*" RentalCartItem : contains
+Garment "1" -- "0..*" RentalCartItem : selected as
+
+Category "1" -- "0..*" Garment : contains
+Garment "1" -- "0..*" RentalUnit : has
+
+RentalUnit "1" -- "0..*" AvailabilityBlock : blocked by
+
+RentalOrder "1" -- "1..*" RentalOrderItem : contains
+Garment "1" -- "0..*" RentalOrderItem : referenced by
+
+RentalOrderItem "1" -- "0..*" Reservation : reservation history
+RentalUnit "1" -- "0..*" Reservation : allocated through
+
+RentalOrder "1" -- "0..*" Payment : has
+RentalOrder "1" -- "0..*" Refund : has
+Payment "0..1" -- "0..*" Refund : optional source payment
+
+RentalOrderItem "1" -- "0..1" InspectionResult : inspection
+RentalUnit "1" -- "0..*" InspectionResult : inspected unit
+
+RentalOrder "1" -- "0..*" FeeApprovalRequest : approval requests
+
+RentalOrder "1" -- "0..*" RentalOrderStatusHistory : status history
+RentalUnit "1" -- "0..*" RentalUnitStatusHistory : status history
+
+note "Tại một thời điểm, mỗi RentalOrderItem\nchỉ có tối đa một Reservation hiệu lực.\nCác Reservation cũ được giữ làm lịch sử thay unit." as ReservationInvariant
+ReservationInvariant .. RentalOrderItem
+
+
+' =========================================================
+' Enum dependencies
+' =========================================================
+
+User ..> UserRole
+
+RentalOrder ..> RentalOrderStatus
+RentalOrder ..> DepositCollectionMethod
+
+Reservation ..> ReservationStatus
+RentalUnit ..> RentalUnitStatus
+
+Payment ..> PaymentPurpose
+Payment ..> PaymentStatus
+
+Refund ..> RefundType
+Refund ..> RefundStatus
+
+FeeApprovalRequest ..> FeeApprovalStatus
+AvailabilityBlock ..> BlockType
+
+
+' =========================================================
+' Layout helpers
+' =========================================================
+
+RentalPolicy -[hidden]right-> User
+User -[hidden]right-> UserRole
+
+RentalOrder -[hidden]right-> RentalCart
+RentalCart -[hidden]right-> RentalOrderStatus
+
+Refund -[hidden]right-> RentalOrderItem
+RentalOrderItem -[hidden]right-> FeeApprovalRequest
+
+Reservation -[hidden]right-> InspectionResult
+InspectionResult -[hidden]right-> Garment
+
+Garment -[hidden]down-> RentalUnit
+RentalUnit -[hidden]down-> AvailabilityBlock
+
+@enduml

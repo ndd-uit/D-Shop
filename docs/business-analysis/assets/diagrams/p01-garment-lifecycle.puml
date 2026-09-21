@@ -1,0 +1,71 @@
+@startuml
+title P01 — Quản lý vòng đời trang phục
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam sequence {
+    ActorBackgroundColor #FFF8F3
+    ActorBorderColor #806A60
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantBorderColor #9A7F73
+    LifeLineBorderColor #C9B8AF
+    GroupBackgroundColor #FFF5EF
+    GroupBorderColor #D6A79E
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+}
+
+actor "Store Manager" as Manager
+participant "D-SHOP" as System
+
+== Quản lý Category ==
+Manager -> System : Tạo hoặc cập nhật Category
+System -> System : Kiểm tra dữ liệu và quyền quản trị
+alt Dữ liệu hợp lệ
+    System --> Manager : Lưu và hiển thị Category
+else Dữ liệu không hợp lệ
+    System --> Manager : Từ chối và hiển thị lỗi
+end
+
+== Quản lý Garment ==
+Manager -> System : Tạo hoặc cập nhật Garment
+System -> System : Kiểm tra Category và dữ liệu Garment
+alt Category tồn tại và đang hoạt động
+    System --> Manager : Lưu và hiển thị Garment
+else Category không hợp lệ
+    System --> Manager : Từ chối thao tác
+end
+
+== Quản lý RentalUnit vật lý ==
+Manager -> System : Tạo RentalUnit cho Garment
+System -> System : Kiểm tra Garment, assetCode và metadata
+alt Garment hợp lệ và assetCode chưa tồn tại
+    System -> System : Tạo RentalUnit = AVAILABLE
+    System -> System : Ghi RentalUnitStatusHistory
+    System --> Manager : Tạo RentalUnit thành công
+else Garment không hợp lệ hoặc assetCode trùng
+    System --> Manager : Từ chối và hiển thị lỗi
+end
+
+Manager -> System : Cập nhật thông tin RentalUnit
+System -> System : Kiểm tra dữ liệu và assetCode
+System --> Manager : Trả kết quả cập nhật
+
+opt Ngừng khai thác RentalUnit
+    Manager -> System : Chọn retire và nhập lý do
+    System -> System : Kiểm tra trạng thái và Reservation hiệu lực
+    alt Unit ở AVAILABLE / DAMAGED / MAINTENANCE\nvà không có Reservation hiệu lực
+        System -> System : RentalUnit = RETIRED
+        System -> System : Ghi RentalUnitStatusHistory
+        System --> Manager : Retire thành công
+    else Không đủ điều kiện
+        System --> Manager : Từ chối retire
+    end
+end
+
+@enduml

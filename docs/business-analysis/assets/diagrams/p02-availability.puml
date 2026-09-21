@@ -1,0 +1,67 @@
+@startuml
+title P02 — Tìm kiếm và kiểm tra khả dụng
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam sequence {
+    ActorBackgroundColor #FFF8F3
+    ActorBorderColor #806A60
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantBorderColor #9A7F73
+    LifeLineBorderColor #C9B8AF
+    GroupBackgroundColor #FFF5EF
+    GroupBorderColor #D6A79E
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+}
+
+actor Customer
+participant "D-SHOP" as System
+
+Customer -> System : Chọn Garment, size, số lượng,\nngày nhận và ngày trả
+System -> System : Kiểm tra dữ liệu và khoảng thuê
+
+alt Dữ liệu không hợp lệ
+    System --> Customer : Yêu cầu điều chỉnh dữ liệu
+else Dữ liệu hợp lệ
+    System -> System : Chuẩn hóa ngày nhận 08:00\nvà ngày trả 18:00
+    System -> System : Lấy RentalPolicy đang hiệu lực
+
+    alt Không có RentalPolicy hiệu lực
+        System --> Customer : Không thể kiểm tra availability
+    else Có RentalPolicy
+        System -> System : Tính requested blocked interval
+        note right of System
+          blockedStartAt = rentalStartAt - 1 ngày
+          blockedEndAt = returnDueAt + 1 ngày
+          Interval: [startAt, endAt)
+        end note
+
+        System -> System : Lọc RentalUnit theo Garment, size và trạng thái
+        System -> System : Loại Reservation hiệu lực bị overlap
+        note right of System
+          Trạng thái chặn lịch:
+          TEMPORARY_HOLD còn hạn,
+          CONFIRMED, ACTIVE.
+
+          Overlap khi:
+          existing.start < requested.end
+          AND existing.end > requested.start
+        end note
+        System -> System : Loại AvailabilityBlock bị overlap
+        System -> System : So sánh số unit khả dụng với quantity
+
+        alt Đủ RentalUnit khả dụng
+            System --> Customer : Hiển thị trang phục có thể thuê
+        else Không đủ RentalUnit khả dụng
+            System --> Customer : Thông báo không khả dụng
+        end
+    end
+end
+
+@enduml

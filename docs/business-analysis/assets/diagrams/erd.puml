@@ -1,0 +1,379 @@
+@startuml
+title D-SHOP — Entity Relationship Diagram
+
+top to bottom direction
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 11
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam linetype ortho
+skinparam entity {
+    BackgroundColor #FFFFFF
+    BorderColor #9A7F73
+    HeaderBackgroundColor #8B6E62
+    HeaderFontColor white
+    FontColor black
+}
+
+' =========================================================
+' USERS / POLICY
+' =========================================================
+
+entity "users" as users {
+    * user_id : UUID <<PK>>
+    --
+    full_name : VARCHAR(150)
+    email : VARCHAR(255) <<UQ>>
+    phone : VARCHAR(30) <<UQ>>
+    password_hash : VARCHAR(255)
+    national_id : VARCHAR(20) <<UQ>>
+    role : user_role
+    is_active : BOOLEAN
+    created_at : TIMESTAMP
+}
+
+entity "rental_policies" as rental_policies {
+    * policy_id : UUID <<PK>>
+    --
+    version : VARCHAR(50) <<UQ>>
+    effective_from : TIMESTAMP
+    effective_to : TIMESTAMP
+    hold_duration : INTEGER
+    approval_threshold : DECIMAL(12,2)
+    late_fee_policy : JSON
+    damage_fee_policy : TEXT
+    created_by : UUID <<FK>>
+    created_at : TIMESTAMP
+}
+
+
+' =========================================================
+' CATALOG
+' =========================================================
+
+entity "categories" as categories {
+    * category_id : UUID <<PK>>
+    --
+    name : VARCHAR(150)
+    description : TEXT
+    is_active : BOOLEAN
+}
+
+entity "garments" as garments {
+    * garment_id : UUID <<PK>>
+    --
+    category_id : UUID <<FK>>
+    name : VARCHAR(200)
+    description : TEXT
+    color : VARCHAR(100)
+    image_urls : TEXT
+    rental_price : DECIMAL(12,2)
+    deposit_amount : DECIMAL(12,2)
+    is_active : BOOLEAN
+}
+
+entity "rental_units" as rental_units {
+    * rental_unit_id : UUID <<PK>>
+    --
+    garment_id : UUID <<FK>>
+    asset_code : VARCHAR(100) <<UQ>>
+    size : VARCHAR(50)
+    condition : VARCHAR(100)
+    status : rental_unit_status
+    created_at : TIMESTAMP
+}
+
+entity "availability_blocks" as availability_blocks {
+    * block_id : UUID <<PK>>
+    --
+    rental_unit_id : UUID <<FK>>
+    type : block_type
+    start_at : TIMESTAMP
+    end_at : TIMESTAMP
+    reason : TEXT
+    status : VARCHAR(50)
+}
+
+
+' =========================================================
+' CART
+' =========================================================
+
+entity "rental_carts" as rental_carts {
+    * cart_id : UUID <<PK>>
+    --
+    customer_id : UUID <<FK, UQ>>
+    rental_start_at : TIMESTAMP
+    return_due_at : TIMESTAMP
+    updated_at : TIMESTAMP
+}
+
+entity "rental_cart_items" as rental_cart_items {
+    * cart_item_id : UUID <<PK>>
+    --
+    cart_id : UUID <<FK>>
+    garment_id : UUID <<FK>>
+    requested_size : VARCHAR(50)
+    quantity : INTEGER
+}
+
+
+' =========================================================
+' RENTAL ORDER
+' =========================================================
+
+entity "rental_orders" as rental_orders {
+    * order_id : UUID <<PK>>
+    --
+    customer_id : UUID <<FK>>
+    policy_id : UUID <<FK>>
+
+    rental_start_at : TIMESTAMP
+    return_due_at : TIMESTAMP
+    actual_pickup_at : TIMESTAMP
+    actual_return_at : TIMESTAMP
+
+    pickup_info : TEXT
+    return_info : TEXT
+
+    status : rental_order_status
+
+    rental_amount : DECIMAL(12,2)
+    deposit_amount : DECIMAL(12,2)
+    upfront_amount : DECIMAL(12,2)
+
+    additional_charge : DECIMAL(12,2)
+    deposit_refund_amount : DECIMAL(12,2)
+
+    collected_deposit_amount : DECIMAL(12,2)
+    deposit_collection_method : deposit_collection_method
+    deposit_collected_at : TIMESTAMP
+
+    additional_payment : DECIMAL(12,2)
+    additional_payment_confirmed_at : TIMESTAMP
+    additional_payment_confirmed_by : UUID <<FK>>
+
+    final_charge : DECIMAL(12,2)
+    total_paid : DECIMAL(12,2)
+    total_refunded : DECIMAL(12,2)
+    net_collected : DECIMAL(12,2)
+
+    created_at : TIMESTAMP
+}
+
+entity "rental_order_items" as rental_order_items {
+    * order_item_id : UUID <<PK>>
+    --
+    order_id : UUID <<FK>>
+    garment_id : UUID <<FK>>
+    requested_size : VARCHAR(50)
+}
+
+
+' =========================================================
+' RESERVATION / INSPECTION
+' =========================================================
+
+entity "reservations" as reservations {
+    * reservation_id : UUID <<PK>>
+    --
+    rental_order_item_id : UUID <<FK>>
+    rental_unit_id : UUID <<FK>>
+
+    status : reservation_status
+
+    blocked_start_at : TIMESTAMP
+    blocked_end_at : TIMESTAMP
+    hold_expires_at : TIMESTAMP
+
+    preparation_condition : VARCHAR(100)
+    preparation_notes : TEXT
+    preparation_images : TEXT
+    prepared_at : TIMESTAMP
+
+    replacement_reason : TEXT
+    replaced_by : UUID <<FK>>
+    replaced_at : TIMESTAMP
+
+    created_at : TIMESTAMP
+}
+
+entity "inspection_results" as inspection_results {
+    * inspection_result_id : UUID <<PK>>
+    --
+    rental_order_item_id : UUID <<FK, UQ>>
+    rental_unit_id : UUID <<FK>>
+    inspected_by : UUID <<FK>>
+
+    condition : VARCHAR(100)
+    accessories_status : VARCHAR(100)
+    issue_type : VARCHAR(100)
+
+    description : TEXT
+    evidence_urls : TEXT
+
+    proposed_charge : DECIMAL(12,2)
+    inspected_at : TIMESTAMP
+}
+
+
+' =========================================================
+' PAYMENT / REFUND / APPROVAL
+' =========================================================
+
+entity "payments" as payments {
+    * payment_id : UUID <<PK>>
+    --
+    rental_order_id : UUID <<FK>>
+
+    purpose : payment_purpose
+    amount : DECIMAL(12,2)
+    status : payment_status
+
+    transaction_ref : VARCHAR(255) <<UQ>>
+    created_at : TIMESTAMP
+    paid_at : TIMESTAMP
+}
+
+entity "refunds" as refunds {
+    * refund_id : UUID <<PK>>
+    --
+    rental_order_id : UUID <<FK>>
+    payment_id : UUID <<FK>>
+
+    type : refund_type
+    amount : DECIMAL(12,2)
+    reason : TEXT
+    status : refund_status
+
+    transaction_ref : VARCHAR(255) <<UQ>>
+    created_at : TIMESTAMP
+    completed_at : TIMESTAMP
+}
+
+entity "fee_approval_requests" as fee_approval_requests {
+    * fee_approval_request_id : UUID <<PK>>
+    --
+    rental_order_id : UUID <<FK>>
+
+    proposed_amount : DECIMAL(12,2)
+    final_amount : DECIMAL(12,2)
+
+    status : fee_approval_status
+    decision_reason : TEXT
+
+    decided_by : UUID <<FK>>
+    decided_at : TIMESTAMP
+    created_at : TIMESTAMP
+}
+
+
+' =========================================================
+' STATUS HISTORY
+' =========================================================
+
+entity "rental_order_status_history" as rental_order_status_history {
+    * history_id : UUID <<PK>>
+    --
+    rental_order_id : UUID <<FK>>
+
+    old_status : rental_order_status
+    new_status : rental_order_status
+
+    changed_by : UUID <<FK>>
+    changed_at : TIMESTAMP
+    reason : TEXT
+}
+
+entity "rental_unit_status_history" as rental_unit_status_history {
+    * history_id : UUID <<PK>>
+    --
+    rental_unit_id : UUID <<FK>>
+
+    old_status : rental_unit_status
+    new_status : rental_unit_status
+
+    changed_by : UUID <<FK>>
+    changed_at : TIMESTAMP
+    reason : TEXT
+}
+
+
+' =========================================================
+' MAIN RELATIONSHIPS
+' =========================================================
+
+users ||--o| rental_carts : customer_id
+users ||--o{ rental_orders : customer_id
+
+users |o--o{ rental_policies : created_by
+
+rental_policies ||--o{ rental_orders : policy_id
+
+
+categories ||--o{ garments : category_id
+garments ||--o{ rental_units : garment_id
+
+rental_units ||--o{ availability_blocks : rental_unit_id
+
+
+rental_carts ||--o{ rental_cart_items : cart_id
+garments ||--o{ rental_cart_items : garment_id
+
+
+rental_orders ||--|{ rental_order_items : order_id
+garments ||--o{ rental_order_items : garment_id
+
+
+rental_order_items ||--o{ reservations : rental_order_item_id
+rental_units ||--o{ reservations : rental_unit_id
+
+users |o--o{ reservations : replaced_by
+
+
+rental_order_items ||--o| inspection_results : rental_order_item_id
+rental_units ||--o{ inspection_results : rental_unit_id
+users ||--o{ inspection_results : inspected_by
+
+
+rental_orders ||--o{ payments : rental_order_id
+
+rental_orders ||--o{ refunds : rental_order_id
+payments |o--o{ refunds : payment_id
+
+
+rental_orders ||--o{ fee_approval_requests : rental_order_id
+users |o--o{ fee_approval_requests : decided_by
+
+
+rental_orders ||--o{ rental_order_status_history : rental_order_id
+users |o--o{ rental_order_status_history : changed_by
+
+rental_units ||--o{ rental_unit_status_history : rental_unit_id
+users |o--o{ rental_unit_status_history : changed_by
+
+
+users |o--o{ rental_orders : additional_payment_confirmed_by
+
+
+' =========================================================
+' Layout helpers
+' =========================================================
+
+rental_policies -[hidden]right-> rental_orders
+rental_orders -[hidden]right-> fee_approval_requests
+
+users -[hidden]right-> rental_carts
+rental_carts -[hidden]right-> rental_order_items
+
+categories -[hidden]right-> garments
+garments -[hidden]right-> rental_units
+
+payments -[hidden]right-> refunds
+
+inspection_results -[hidden]right-> reservations
+reservations -[hidden]right-> availability_blocks
+
+@enduml

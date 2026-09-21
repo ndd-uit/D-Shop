@@ -1,0 +1,80 @@
+@startuml
+title P03 — Đặt thuê, giữ chỗ và thanh toán
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam sequence {
+    ActorBackgroundColor #FFF8F3
+    ActorBorderColor #806A60
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantBorderColor #9A7F73
+    LifeLineBorderColor #C9B8AF
+    GroupBackgroundColor #FFF5EF
+    GroupBorderColor #D6A79E
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+}
+
+actor Customer
+participant "D-SHOP" as System
+participant "Payment Service" as Payment
+
+== Checkout nhóm item được chọn ==
+Customer -> System : Chọn một hoặc nhiều RentalCartItem
+Customer -> System : Xác nhận checkout và thông tin nhận/trả
+System -> System : Kiểm tra input và cùng khoảng thuê
+System -> System : Kiểm tra lại availability toàn bộ item được chọn
+
+alt Có item được chọn không còn khả dụng
+    System -> System : Rollback toàn bộ checkout
+    System --> Customer : Không tạo đơn một phần
+else Giữ được toàn bộ item được chọn
+    System -> System : Phân bổ RentalUnit
+    System -> System : Tính rentalAmount theo số ngày\nvà snapshot depositAmount
+    System -> System : Tạo RentalOrder = PENDING_PAYMENT
+    System -> System : Tạo Reservation = TEMPORARY_HOLD
+    note right of System
+      holdExpiresAt = now + policy.holdDuration.
+      Chỉ item đã checkout bị xóa khỏi giỏ;
+      item không chọn vẫn được giữ lại.
+    end note
+    System --> Customer : Hiển thị rentalAmount và thời hạn giữ chỗ
+
+    == Thanh toán tiền thuê ==
+    Customer -> System : Yêu cầu thanh toán
+    System -> System : Kiểm tra Order PENDING_PAYMENT\nvà toàn bộ hold còn hiệu lực
+    alt Hold đã hết hạn
+        System -> System : Expire Reservation và Order
+        System --> Customer : Giữ chỗ đã hết hạn
+    else Hold còn hiệu lực
+        System -> System : Tạo Payment RENTAL = PENDING
+        System -> Payment : Tạo yêu cầu thanh toán
+        Payment --> Customer : Hiển thị QR / hướng dẫn
+        Customer -> Payment : Thực hiện thanh toán
+        Payment -> System : Callback / IPN
+        System -> System : Xác minh chữ ký, số tiền,\nreference và idempotency
+
+        alt Callback không hợp lệ
+            System --> Payment : Từ chối callback
+        else Thanh toán thất bại
+            System -> System : Payment = FAILED
+            System --> Customer : Thanh toán thất bại
+        else Thành công và hold còn hiệu lực
+            System -> System : Payment = SUCCEEDED
+            System -> System : Order = CONFIRMED
+            System -> System : Reservation = CONFIRMED
+            System --> Customer : Đặt thuê thành công
+        else Thành công nhưng hold đã hết hạn
+            System -> System : Không hồi sinh Order EXPIRED
+            System -> System : Chuyển giao dịch sang đối soát/refund
+            System --> Customer : Thông báo cần đối soát
+        end
+    end
+end
+
+@enduml

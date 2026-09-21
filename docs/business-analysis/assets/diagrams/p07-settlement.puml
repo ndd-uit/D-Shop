@@ -1,0 +1,85 @@
+@startuml
+title P07 — Quyết toán, phê duyệt phí và hoàn tất đơn
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam sequence {
+    ActorBackgroundColor #FFF8F3
+    ActorBorderColor #806A60
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantBorderColor #9A7F73
+    LifeLineBorderColor #C9B8AF
+    GroupBackgroundColor #FFF5EF
+    GroupBorderColor #D6A79E
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+}
+
+actor Customer
+actor "Rental Staff" as Staff
+actor "Store Manager" as Manager
+participant "D-SHOP" as System
+participant "Payment Service" as Payment
+
+Staff -> System : Mở RentalOrder SETTLEMENT_PENDING
+System -> System : Tổng proposedCharge từ InspectionResult
+System -> System : Tính lateFee theo policy snapshot
+System -> System : additionalCharge = inspectionCharge + lateFee
+System -> System : Tính depositRefundAmount,\nadditionalPayment và finalCharge
+
+note right of System
+  08:00–12:00: (d - 0.5) × dailyRentalAmount
+  Sau 12:00–18:00: d × dailyRentalAmount
+end note
+
+alt Phí vượt approvalThreshold\nhoặc có SEVERE_DAMAGE / LOST
+    System -> System : Tạo FeeApprovalRequest = PENDING
+    System --> Staff : Chờ Store Manager phê duyệt
+    Manager -> System : Xem phí, InspectionResult và bằng chứng
+    Manager -> System : APPROVE / ADJUST / REJECT
+    System -> System : Ghi quyết định và resolvedAmount
+    System -> System : Tính lại số tiền quyết toán
+else Phí nằm trong quyền Staff
+    Staff -> System : Xác nhận khoản phí
+    System -> System : Ghi FeeApprovalRequest = APPROVED
+end
+
+alt depositRefundAmount > 0
+    System -> System : Tạo/cập nhật Refund DEPOSIT_RETURN
+    alt Cọc thu qua Payment Service
+        System -> Payment : Yêu cầu/đối soát hoàn tiền nếu được hỗ trợ
+        Payment -> System : Kết quả hoàn tiền
+    else Cọc thu trực tiếp
+        Staff -> System : Ghi số tiền, phương thức,\nthời điểm và kết quả hoàn
+    end
+    System --> Customer : Cập nhật trạng thái hoàn cọc
+else additionalPayment > 0
+    System --> Staff : Hiển thị khoản cần thu thêm
+    Staff --> Customer : Thông báo số tiền
+    Customer -> Staff : Thanh toán khoản bổ sung
+    Staff -> System : Xác nhận số tiền đã nhận
+    System -> System : Ghi người và thời điểm xác nhận
+else Không hoàn và không thu thêm
+    System -> System : Ghi nhận quyết toán cân bằng
+end
+
+System -> System : Kiểm tra toàn bộ nghĩa vụ tài chính
+alt Refund hoặc khoản thu thêm chưa hoàn tất
+    System --> Staff : Giữ Order = SETTLEMENT_PENDING
+else Đã hoàn tất
+    System -> System : RentalOrder = COMPLETED
+    System --> Staff : Quyết toán hoàn tất
+end
+
+note over System
+  RentalOrder COMPLETED không kết thúc Reservation ngay.
+  Reservation ACTIVE chỉ → COMPLETED khi unit đã trả
+  và currentTime >= blockedEndAt.
+end note
+
+@enduml

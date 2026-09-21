@@ -1,0 +1,79 @@
+@startuml
+title P04 — Chuẩn bị đơn thuê
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam sequence {
+    ActorBackgroundColor #FFF8F3
+    ActorBorderColor #806A60
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantBorderColor #9A7F73
+    LifeLineBorderColor #C9B8AF
+    GroupBackgroundColor #FFF5EF
+    GroupBorderColor #D6A79E
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+}
+
+actor "Rental Staff" as Staff
+participant "D-SHOP" as System
+participant "Payment Service" as Payment
+
+Staff -> System : Mở danh sách đơn cần chuẩn bị
+System --> Staff : Hiển thị Order CONFIRMED và unit được phân bổ
+
+Staff -> System : Xác nhận bắt đầu chuẩn bị
+System -> System : Kiểm tra trạng thái và pickup cutoff
+alt Order không phải CONFIRMED
+    System --> Staff : Từ chối do sai trạng thái
+else Đã qua 18:00 ngày nhận
+    System --> Staff : Không cho tiếp tục chuẩn bị
+else Đủ điều kiện
+    System -> System : RentalOrder = PREPARING
+    System --> Staff : Cho phép chuẩn bị từng RentalUnit
+
+    loop Mỗi Reservation CONFIRMED
+        Staff -> System : Ghi tình trạng, phụ kiện,\nghi chú và bằng chứng chuẩn bị
+        System -> System : Kiểm tra Reservation và RentalUnit
+        alt RentalUnit AVAILABLE và đạt yêu cầu
+            System -> System : Ghi preparedAt
+            System -> System : RentalUnit = PREPARING
+            System --> Staff : Lưu kết quả chuẩn bị
+        else RentalUnit không thể bàn giao
+            Staff -> System : Yêu cầu thay RentalUnit và nhập lý do
+            System -> System : Tìm unit cùng Garment/size\ntrong blocked interval cũ
+            alt Có RentalUnit thay thế
+                System -> System : Reservation cũ = RELEASED
+                System -> System : Tạo Reservation mới = CONFIRMED
+                System -> System : Order READY_FOR_PICKUP\nquay lại PREPARING nếu cần
+                System --> Staff : Yêu cầu chuẩn bị unit mới
+            else Không có unit thay thế
+                Staff -> System : Ghi nhận FULFILLMENT_FAILED và lý do
+                System -> System : Kiểm tra lại không còn unit thay thế
+                System -> System : Release Reservation hiện hành
+                System -> System : Trả unit PREPARING về AVAILABLE
+                System -> System : Order = FULFILLMENT_FAILED
+                System -> System : Tạo RENTAL_REFUND toàn bộ rentalAmount
+                opt Có tích hợp hoàn tiền điện tử
+                    System -> Payment : Gửi yêu cầu hoàn tiền
+                end
+                System --> Staff : Đóng luồng chuẩn bị
+            end
+        end
+    end
+
+    System -> System : Kiểm tra toàn bộ item đã prepared
+    alt Tất cả item đã chuẩn bị
+        System -> System : Order = READY_FOR_PICKUP
+        System --> Staff : Đơn sẵn sàng bàn giao
+    else Còn item chưa chuẩn bị
+        System --> Staff : Giữ Order = PREPARING
+    end
+end
+
+@enduml

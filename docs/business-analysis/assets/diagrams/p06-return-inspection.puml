@@ -1,0 +1,84 @@
+@startuml
+title P06 — Hoàn trả và kiểm tra trang phục
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam sequence {
+    ActorBackgroundColor #FFF8F3
+    ActorBorderColor #806A60
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantBorderColor #9A7F73
+    LifeLineBorderColor #C9B8AF
+    GroupBackgroundColor #FFF5EF
+    GroupBorderColor #D6A79E
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+}
+
+actor Customer
+actor "Rental Staff" as Staff
+participant "D-SHOP" as System
+
+Customer -> Staff : Hoàn trả trang phục
+Staff -> System : Tra cứu RentalOrder và xác nhận nhận trả
+System -> System : Kiểm tra giờ tiếp nhận 08:00–18:00
+
+alt Ngoài giờ tiếp nhận
+    System --> Staff : Từ chối ghi nhận hoàn trả
+else Trong giờ tiếp nhận
+    System -> System : Kiểm tra Order RENTING / OVERDUE
+    System -> System : Xác định đúng một Reservation\nACTIVE cho mỗi item
+    alt Order hoặc Reservation không hợp lệ
+        System --> Staff : Từ chối và hiển thị lỗi dữ liệu
+    else Đủ điều kiện nhận trả
+        System -> System : Ghi actualReturnAt
+        System -> System : Order RENTING/OVERDUE → RETURNED
+        System -> System : RentalUnit RENTED → RETURN_INSPECTION
+        System -> System : Order RETURNED → INSPECTING
+        System --> Staff : Bắt đầu kiểm tra từng item
+
+        loop Mỗi RentalOrderItem
+            Staff -> System : Ghi condition, phụ kiện, issue,\nmô tả, bằng chứng và proposedCharge
+            System -> System : Xác định Reservation đã bàn giao\n(ACTIVE hoặc COMPLETED)
+            alt Item đã kiểm tra hoặc không xác định được unit
+                System --> Staff : Từ chối lưu InspectionResult
+            else proposedCharge > 0 nhưng thiếu\nissue/mô tả/bằng chứng
+                System --> Staff : Yêu cầu bổ sung dữ liệu
+            else Dữ liệu hợp lệ
+                System -> System : Tạo InspectionResult
+                System --> Staff : Lưu kết quả kiểm tra
+            end
+        end
+
+        System -> System : Kiểm tra toàn bộ item đã inspection
+        alt Còn item chưa kiểm tra
+            System --> Staff : Giữ Order = INSPECTING
+        else Đã kiểm tra toàn bộ
+            System -> System : Order = SETTLEMENT_PENDING
+            System --> Staff : Chuyển sang quyết toán
+        end
+
+        opt Phân loại trạng thái vận hành của unit
+            Staff -> System : Chọn CLEANING / MAINTENANCE / DAMAGED
+            System -> System : Kiểm tra transition từ RETURN_INSPECTION
+            alt Transition hợp lệ
+                System -> System : Cập nhật RentalUnit và StatusHistory
+                System --> Staff : Cập nhật thành công
+            else Transition không hợp lệ
+                System --> Staff : Từ chối cập nhật
+            end
+        end
+    end
+end
+
+note over Staff,System
+  Backend hiện không hỗ trợ chuyển trực tiếp
+  RETURN_INSPECTION → AVAILABLE hoặc RETIRED.
+end note
+
+@enduml

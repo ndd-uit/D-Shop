@@ -1,0 +1,67 @@
+@startuml
+title D-SHOP — Vòng đời RentalUnit
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam state {
+    BackgroundColor #FFFFFF
+    BorderColor #9A7F73
+    FontColor #3F3530
+    StartColor #6B5B53
+    EndColor #6B5B53
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+    FontColor #4A403B
+}
+hide empty description
+
+[*] --> AVAILABLE : Tạo RentalUnit
+
+AVAILABLE --> PREPARING : Bắt đầu chuẩn bị
+AVAILABLE --> MAINTENANCE : Ghi nhận cần bảo trì
+AVAILABLE --> DAMAGED : Ghi nhận hư hỏng
+AVAILABLE --> RETIRED : Manager ngừng khai thác
+
+PREPARING --> AVAILABLE : Giải phóng / thay unit
+PREPARING --> RENTED : Bàn giao thành công
+PREPARING --> MAINTENANCE : Phát hiện cần bảo trì
+PREPARING --> DAMAGED : Phát hiện hư hỏng
+
+RENTED --> RETURN_INSPECTION : Tiếp nhận hoàn trả
+
+RETURN_INSPECTION --> CLEANING : Cần vệ sinh
+RETURN_INSPECTION --> MAINTENANCE : Cần bảo trì
+RETURN_INSPECTION --> DAMAGED : Hư hỏng
+
+CLEANING --> AVAILABLE : Hoàn tất vệ sinh
+MAINTENANCE --> AVAILABLE : Hoàn tất bảo trì
+MAINTENANCE --> RETIRED : Manager ngừng khai thác
+DAMAGED --> MAINTENANCE : Có thể sửa chữa
+DAMAGED --> RETIRED : Manager ngừng khai thác
+
+RETIRED --> [*]
+
+note left of AVAILABLE
+  AVAILABLE chưa đủ để kết luận có thể thuê.
+  Availability còn phụ thuộc Reservation,
+  AvailabilityBlock và blocked interval.
+end note
+
+note right of RETURN_INSPECTION
+  Backend hiện không cho chuyển trực tiếp
+  RETURN_INSPECTION → AVAILABLE.
+  Unit phải được phân loại sang CLEANING,
+  MAINTENANCE hoặc DAMAGED.
+end note
+
+note right of RETIRED
+  Trạng thái kết thúc, không có
+  transition đi ra.
+end note
+
+@enduml

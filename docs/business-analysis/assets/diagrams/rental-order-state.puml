@@ -1,0 +1,68 @@
+@startuml
+title D-SHOP — Vòng đời RentalOrder
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam state {
+    BackgroundColor #FFFFFF
+    BorderColor #9A7F73
+    FontColor #3F3530
+    StartColor #6B5B53
+    EndColor #6B5B53
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+    FontColor #4A403B
+}
+hide empty description
+
+[*] --> PENDING_PAYMENT : Tạo đơn và giữ chỗ
+PENDING_PAYMENT --> CONFIRMED : Thanh toán thành công\n[hold còn hiệu lực]
+PENDING_PAYMENT --> EXPIRED : Hết thời gian giữ chỗ
+
+CONFIRMED --> PREPARING : Bắt đầu chuẩn bị
+PREPARING --> READY_FOR_PICKUP : Hoàn tất chuẩn bị
+READY_FOR_PICKUP --> PREPARING : Thay RentalUnit\n[cần chuẩn bị lại]
+READY_FOR_PICKUP --> RENTING : Bàn giao thành công\n[đã thu đủ tiền cọc]
+
+PREPARING --> FULFILLMENT_FAILED : Không có unit thay thế
+READY_FOR_PICKUP --> FULFILLMENT_FAILED : Không thể bàn giao\nvà không có unit thay thế
+
+CONFIRMED --> NO_SHOW : Qua 18:00 ngày nhận\n[chưa pickup/chưa thu cọc]
+PREPARING --> NO_SHOW : Qua 18:00 ngày nhận\n[chưa pickup/chưa thu cọc]
+READY_FOR_PICKUP --> NO_SHOW : Qua 18:00 ngày nhận\n[chưa pickup/chưa thu cọc]
+
+RENTING --> OVERDUE : Quá returnDueAt\n[chưa hoàn trả]
+RENTING --> RETURNED : Tiếp nhận hoàn trả
+OVERDUE --> RETURNED : Tiếp nhận hoàn trả
+RETURNED --> INSPECTING : Bắt đầu kiểm tra
+INSPECTING --> SETTLEMENT_PENDING : Hoàn tất kiểm tra
+SETTLEMENT_PENDING --> COMPLETED : Hoàn tất nghĩa vụ tài chính
+
+EXPIRED --> [*]
+NO_SHOW --> [*]
+FULFILLMENT_FAILED --> [*]
+COMPLETED --> [*]
+
+note right of FULFILLMENT_FAILED
+  Chỉ xảy ra trước bàn giao.
+  Rental Staff phải xác nhận không còn
+  RentalUnit thay thế phù hợp.
+end note
+
+note right of NO_SHOW
+  Không phải Customer Cancellation.
+  Không hoàn tiền thuê và không thu cọc.
+end note
+
+note right of COMPLETED
+  Order hoàn tất không làm Reservation
+  COMPLETED ngay; buffer vẫn được giữ
+  đến blockedEndAt.
+end note
+
+@enduml

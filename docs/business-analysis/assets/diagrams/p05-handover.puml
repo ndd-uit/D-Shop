@@ -1,0 +1,71 @@
+@startuml
+title P05 — Thu cọc và bàn giao trang phục
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam sequence {
+    ActorBackgroundColor #FFF8F3
+    ActorBorderColor #806A60
+    ParticipantBackgroundColor #FFFFFF
+    ParticipantBorderColor #9A7F73
+    LifeLineBorderColor #C9B8AF
+    GroupBackgroundColor #FFF5EF
+    GroupBorderColor #D6A79E
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+}
+
+actor Customer
+actor "Rental Staff" as Staff
+participant "D-SHOP" as System
+participant "Payment Service" as Payment
+
+Staff -> System : Tra cứu RentalOrder đến ngày nhận
+System --> Staff : Hiển thị trạng thái, Customer,\nRentalUnit và tiền cọc yêu cầu
+
+alt Qua 18:00 ngày nhận và chưa pickup/chưa thu cọc
+    Staff -> System : Ghi nhận Customer NO_SHOW
+    System -> System : Xác minh điều kiện NO_SHOW
+    System -> System : Release Reservation
+    System -> System : Trả unit PREPARING về AVAILABLE
+    System -> System : RentalOrder = NO_SHOW
+    System --> Staff : Đóng đơn, không hoàn tiền thuê
+else Customer đến trong pickup window
+    Customer -> Staff : Xuất trình thông tin nhận thuê
+    Staff -> System : Đối chiếu Customer và CCCD
+    alt Thông tin không khớp
+        System --> Staff : Không cho phép bàn giao
+        Staff --> Customer : Yêu cầu xác minh lại
+    else Thông tin hợp lệ
+        alt Thu cọc trực tiếp
+            Customer -> Staff : Thanh toán tiền cọc
+            Staff -> System : Ghi số tiền, phương thức và thời điểm thu
+        else Thu cọc qua Payment Service
+            System -> Payment : Tạo yêu cầu thanh toán DEPOSIT
+            Payment --> Customer : Hiển thị QR / hướng dẫn
+            Customer -> Payment : Thanh toán tiền cọc
+            Payment -> System : Callback / IPN
+            System -> System : Xác minh giao dịch DEPOSIT
+        end
+
+        System -> System : Kiểm tra đã thu đủ tiền cọc
+        alt Chưa thu đủ hoặc giao dịch chưa xác minh
+            System --> Staff : Không cho phép bàn giao
+        else Đã thu đủ tiền cọc
+            Staff -> System : Xác nhận bàn giao toàn bộ item
+            System -> System : Ghi actualPickupAt
+            System -> System : Reservation CONFIRMED → ACTIVE
+            System -> System : RentalUnit PREPARING → RENTED
+            System -> System : RentalOrder → RENTING
+            System --> Staff : Bàn giao thành công
+            Staff --> Customer : Giao trang phục và phụ kiện
+        end
+    end
+end
+
+@enduml

@@ -1,0 +1,107 @@
+@startuml
+title D-SHOP — Tổng quan Use Case
+
+left to right direction
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam ArrowColor #6B5B53
+skinparam actor {
+    BackgroundColor #FFF8F3
+    BorderColor #806A60
+    FontColor #3F3530
+}
+skinparam usecase {
+    BackgroundColor #FFFFFF
+    BorderColor #A78478
+    FontColor #3F3530
+}
+skinparam rectangle {
+    BackgroundColor #FFF9F5
+    BorderColor #C4A99D
+    FontColor #3F3530
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+    FontColor #4A403B
+}
+
+actor Customer
+actor "Rental Staff" as Staff
+actor "Store Manager" as Manager
+actor "Payment Service" as Payment
+
+rectangle "HỆ THỐNG D-SHOP" as DSHOP {
+    package "Tài khoản" #F7E4E1 {
+        usecase "UC-001\nĐăng ký và đăng nhập" as UC001
+    }
+
+    package "Tìm kiếm và đặt thuê" #E8F1EC {
+        usecase "UC-002\nTìm kiếm và lọc\ntrang phục" as UC002
+        usecase "UC-003\nKiểm tra availability" as UC003
+        usecase "UC-004\nQuản lý giỏ thuê" as UC004
+        usecase "UC-005\nTạo đơn thuê" as UC005
+        usecase "UC-006\nThanh toán tiền thuê" as UC006
+        usecase "UC-007\nTheo dõi đơn thuê" as UC007
+    }
+
+    package "Vận hành đơn thuê" #FFF1DC {
+        usecase "UC-010\nChuẩn bị đơn thuê" as UC010
+        usecase "UC-011\nGhi nhận tiền cọc\nvà bàn giao" as UC011
+        usecase "UC-012\nTheo dõi đơn đang thuê\nvà quá hạn" as UC012
+        usecase "UC-013\nTiếp nhận hoàn trả\nvà kiểm tra" as UC013
+        usecase "UC-014\nGhi nhận phí phát sinh" as UC014
+        usecase "UC-016\nQuyết toán và\nhoàn tiền cọc" as UC016
+        usecase "UC-018\nXử lý Customer\nkhông đến nhận" as UC018
+        usecase "UC-019\nXử lý cửa hàng không\nthể cung cấp đơn" as UC019
+    }
+
+    package "Quản trị cửa hàng" #E6EEF6 {
+        usecase "UC-008\nQuản lý Category,\nGarment và RentalUnit" as UC008
+        usecase "UC-009\nQuản lý AvailabilityBlock" as UC009
+        usecase "UC-015\nPhê duyệt phí\nvượt ngưỡng" as UC015
+        usecase "UC-017\nXem báo cáo vận hành" as UC017
+    }
+
+    package "Planned Feature" #F0F0F0 {
+        usecase "UC-AI-001\nTra cứu và hỗ trợ\nbằng AI Chatbot" as UCAI
+    }
+}
+
+Customer -- UC001
+Customer -- UC002
+Customer -- UC003
+Customer -- UC004
+Customer -- UC005
+Customer -- UC006
+Customer -- UC007
+
+Staff -- UC010
+Staff -- UC011
+Staff -- UC012
+Staff -- UC013
+Staff -- UC014
+Staff -- UC016
+Staff -- UC018
+Staff -- UC019
+
+Manager -- UC008
+Manager -- UC009
+Manager -- UC015
+Manager -- UC017
+
+Payment -- UC006
+
+UC002 ..> UC003 : <<include>>
+UC005 ..> UC003 : <<include>>
+UC015 ..> UC016 : <<extend>>
+
+Customer .. UCAI
+note right of UCAI
+  Planned — ngoài baseline hiện tại
+end note
+
+@enduml

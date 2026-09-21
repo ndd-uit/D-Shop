@@ -1,0 +1,59 @@
+@startuml
+title D-SHOP — Vòng đời Reservation
+
+skinparam backgroundColor #FFFDF9
+skinparam defaultFontName Arial
+skinparam defaultFontSize 12
+skinparam shadowing false
+skinparam ArrowColor #6B5B53
+skinparam state {
+    BackgroundColor #FFFFFF
+    BorderColor #9A7F73
+    FontColor #3F3530
+    StartColor #6B5B53
+    EndColor #6B5B53
+}
+skinparam note {
+    BackgroundColor #FFF2E8
+    BorderColor #D6A79E
+    FontColor #4A403B
+}
+hide empty description
+
+[*] --> TEMPORARY_HOLD : Checkout thành công
+TEMPORARY_HOLD --> CONFIRMED : Thanh toán tiền thuê\n[hold còn hiệu lực]
+TEMPORARY_HOLD --> EXPIRED : holdExpiresAt đã qua
+
+CONFIRMED --> ACTIVE : Bàn giao thành công
+CONFIRMED --> RELEASED : NO_SHOW
+CONFIRMED --> RELEASED : FULFILLMENT_FAILED
+CONFIRMED --> RELEASED : Thay RentalUnit
+
+ACTIVE --> COMPLETED : RentalUnit đã hoàn trả\nAND now >= blockedEndAt
+
+EXPIRED --> [*]
+RELEASED --> [*]
+COMPLETED --> [*]
+
+note left of TEMPORARY_HOLD
+  Chặn availability khi
+  holdExpiresAt > currentTime.
+end note
+
+note right of RELEASED
+  Bản ghi cũ được giữ lại
+  để bảo toàn lịch sử phân bổ.
+end note
+
+note right of ACTIVE
+  Chỉ ACTIVE sau khi RentalUnit
+  thực tế được bàn giao.
+end note
+
+note right of COMPLETED
+  RentalOrder có thể COMPLETED trước.
+  Reservation chỉ kết thúc sau khi
+  đã trả unit và hết blocked interval.
+end note
+
+@enduml
