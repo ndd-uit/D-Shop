@@ -55,3 +55,23 @@ select {
         transform: translateY(0);
     }
 }
+
+@media (prefers-reduced-motion: no-preference) {
+    .chatbot-typing-dot {
+        animation: chatbot-typing 900ms ease-in-out infinite;
+    }
+}
+
+@keyframes chatbot-typing {
+    0%,
+    60%,
+    100% {
+        opacity: 0.35;
+        transform: translateY(0);
+    }
+
+    30% {
+        opacity: 1;
+        transform: translateY(-3px);
+    }
+}
