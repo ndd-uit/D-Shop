@@ -23,7 +23,6 @@ stateDiagram-v2
     INSPECTING --> SETTLEMENT_PENDING
     SETTLEMENT_PENDING --> COMPLETED
 
-    CONFIRMED --> FULFILLMENT_FAILED : Không thể cung cấp
     PREPARING --> FULFILLMENT_FAILED : Không thể cung cấp
     READY_FOR_PICKUP --> FULFILLMENT_FAILED : Không thể bàn giao
 
@@ -46,9 +45,8 @@ stateDiagram-v2
     [*] --> TEMPORARY_HOLD
     TEMPORARY_HOLD --> CONFIRMED : Thanh toán tiền thuê hợp lệ
     TEMPORARY_HOLD --> EXPIRED : holdExpiresAt đã qua
-    CONFIRMED --> ACTIVE : Đơn đi vào vận hành
-    CONFIRMED --> RELEASED : NO_SHOW / FULFILLMENT_FAILED
-    ACTIVE --> RELEASED : FULFILLMENT_FAILED trước bàn giao
+    CONFIRMED --> ACTIVE : Bàn giao thành công
+    CONFIRMED --> RELEASED : NO_SHOW / FULFILLMENT_FAILED / thay RentalUnit
     ACTIVE --> COMPLETED : Đã trả và now >= blockedEndAt
 
     EXPIRED --> [*]

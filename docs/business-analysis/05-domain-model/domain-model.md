@@ -30,6 +30,7 @@ Domain Model mô tả các đối tượng nghiệp vụ chính và mối quan h
 classDiagram
     User "1" --> "0..1" RentalCart
     User "1" --> "*" RentalOrder
+    RentalPolicy "1" --> "*" RentalOrder
 
     Category "1" --> "*" Garment
     Garment "1" --> "*" RentalUnit

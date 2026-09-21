@@ -64,4 +64,4 @@ Business owner selected Rental Staff as the responsible actor on 2026-09-21. Mar
 
 ## Version Control
 
-The Markdown baseline is tracked under `server/docs/business-analysis/` in the backend repository. Business-document changes should be committed independently from production-code changes whenever practical.
+The Markdown baseline is tracked under `docs/business-analysis/` in the backend repository. Business-document changes should be committed independently from production-code changes whenever practical.

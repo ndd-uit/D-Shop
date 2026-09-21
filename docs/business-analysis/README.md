@@ -81,7 +81,7 @@ Customer Cancellation hiện không thuộc scope.
 
 Ưu tiên theo thứ tự:
 
-1. ADR đã chấp nhận
+1. Business Decision đã chấp nhận
 2. Business Rules hiện hành
 3. Requirements / Use Cases đã đồng bộ
 4. Implementation đã được xác nhận bằng test

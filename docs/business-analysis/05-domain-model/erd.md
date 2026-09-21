@@ -12,6 +12,7 @@ erDiagram
 
     USER ||--o| RENTAL_CART : owns
     USER ||--o{ RENTAL_ORDER : places
+    RENTAL_POLICY ||--o{ RENTAL_ORDER : applies_to
 
     CATEGORY ||--o{ GARMENT : contains
     GARMENT ||--o{ RENTAL_UNIT : has

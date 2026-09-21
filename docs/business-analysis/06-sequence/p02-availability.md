@@ -12,32 +12,20 @@ P02 mô tả cách Customer kiểm tra khả dụng của Garment theo khoảng 
 ```mermaid
 sequenceDiagram
     actor Customer
-    participant UI as Customer UI
-    participant Controller as Availability Controller
-    participant Service as Availability Service
-    participant Repository as Availability Repository
-    participant DB as Database
+    participant System as D-SHOP
 
-    Customer->>UI: Chọn Garment và ngày nhận/ngày trả
-    UI->>Controller: GET availability
-    Controller->>Service: checkAvailability(criteria)
-    Service->>Service: Chuẩn hóa 08:00 / 18:00
-    Service->>Service: Mở rộng request thành blocked interval
-    Service->>Repository: findAvailableRentalUnits(blockedStartAt, blockedEndAt)
-    Repository->>DB: Lọc trạng thái RentalUnit
-    Repository->>DB: NOT Reservation overlap
-    Note over Repository,DB: existing.start < requested.end<br/>AND existing.end > requested.start
-    Repository->>DB: NOT AvailabilityBlock overlap
-    DB-->>Repository: RentalUnit khả dụng
-    Repository-->>Service: Kết quả
+    Customer->>System: Chọn Garment và ngày nhận/ngày trả
+    System->>System: Kiểm tra khoảng thuê hợp lệ
+    System->>System: Chuẩn hóa thời gian nhận 08:00 và trả 18:00
+    System->>System: Tính requested blocked interval có buffer
+    System->>System: Kiểm tra trạng thái RentalUnit
+    System->>System: Kiểm tra Reservation hiệu lực bị overlap
+    Note over System: existing.start < requested.end<br/>AND existing.end > requested.start
+    System->>System: Kiểm tra AvailabilityBlock bị overlap
 
     alt Có ít nhất một RentalUnit khả dụng
-        Service-->>Controller: available = true
-        Controller-->>UI: Danh sách/khả dụng
-        UI-->>Customer: Hiển thị Garment khả dụng
+        System-->>Customer: Hiển thị Garment/RentalUnit khả dụng
     else Không có RentalUnit khả dụng
-        Service-->>Controller: available = false
-        Controller-->>UI: Không khả dụng
-        UI-->>Customer: Thông báo không khả dụng
+        System-->>Customer: Thông báo không khả dụng
     end
 ```

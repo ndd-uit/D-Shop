@@ -31,7 +31,7 @@ Ngày 08/09 có thể được thuê nếu không có xung đột khác.
 | ID | Business Rule |
 | --- | --- |
 | BRL-007 | Tất cả item trong cùng RentalOrder phải sử dụng chung khoảng thời gian thuê. |
-| BRL-008 | Mỗi RentalOrderItem phải được phân bổ đúng một RentalUnit. |
+| BRL-008 | Tại một thời điểm, mỗi RentalOrderItem chỉ được có một Reservation hiệu lực dùng để phân bổ một RentalUnit; RentalOrderItem có thể có nhiều Reservation lịch sử khi RentalUnit được thay thế. |
 | BRL-009 | Temporary hold có thời hạn mặc định 15 phút. |
 | BRL-010 | Temporary hold hết hạn không còn quyền giữ RentalUnit. |
 | BRL-011 | Customer có thể checkout một hoặc nhiều RentalCartItem được chọn trong giỏ. |
