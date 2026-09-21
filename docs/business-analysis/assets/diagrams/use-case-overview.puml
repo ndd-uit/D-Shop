@@ -94,6 +94,14 @@ Manager -- UC015
 Manager -- UC017
 
 Payment -- UC006
+Payment -- UC011
+Payment -- UC016
+Payment -- UC019
+
+note right of Payment
+  UC-011, UC-016 và UC-019 chỉ liên kết
+  khi dùng thanh toán/hoàn tiền điện tử.
+end note
 
 UC002 ..> UC003 : <<include>>
 UC005 ..> UC003 : <<include>>

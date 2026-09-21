@@ -89,6 +89,7 @@
 **Pre-condition:**
 
 - RentalUnit đang trong trạng thái RENTED.
+- Thao tác tiếp nhận hoàn trả được thực hiện trong giờ 08:00-18:00.
 
 **Post-condition:**
 
@@ -109,7 +110,9 @@
 - Trang phục cần vệ sinh.
 - Trang phục cần bảo trì.
 - Trang phục bị hư hỏng.
-- Trang phục không còn khả năng tiếp tục cho thuê.
+- Nếu không còn khả năng tiếp tục cho thuê, Staff phân loại unit là `DAMAGED`; Store Manager thực hiện retire ở bước quản lý tài sản riêng.
+
+**Transition note:** Baseline hiện tại chỉ cho phép `RETURN_INSPECTION` chuyển trực tiếp sang `CLEANING`, `MAINTENANCE` hoặc `DAMAGED`, không chuyển thẳng sang `AVAILABLE` hoặc `RETIRED`.
 
 ---
 

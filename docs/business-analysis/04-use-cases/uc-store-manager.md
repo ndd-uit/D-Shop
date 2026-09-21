@@ -17,6 +17,7 @@
 
 - Dữ liệu không hợp lệ.
 - Mã tài sản RentalUnit bị trùng.
+- Chỉ được retire RentalUnit đang ở `AVAILABLE`, `DAMAGED` hoặc `MAINTENANCE` và không có Reservation hiệu lực.
 
 ---
 

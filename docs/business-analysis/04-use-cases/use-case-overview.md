@@ -2,6 +2,10 @@
 
 Use Case Overview mô tả các chức năng chính của D-SHOP theo từng actor.
 
+![D-SHOP Use Case Overview](../assets/diagrams/use-case-overview.svg)
+
+[PlantUML source](../assets/diagrams/use-case-overview.puml)
+
 ## Actors
 
 | Actor | Vai trò |
@@ -25,15 +29,21 @@ Use Case Overview mô tả các chức năng chính của D-SHOP theo từng act
 | UC-008 | Quản lý Category, Garment và RentalUnit | Store Manager |
 | UC-009 | Quản lý AvailabilityBlock | Store Manager |
 | UC-010 | Chuẩn bị đơn thuê | Rental Staff |
-| UC-011 | Ghi nhận tiền cọc và bàn giao | Rental Staff |
+| UC-011 | Ghi nhận tiền cọc và bàn giao | Rental Staff, Payment Service (tùy phương thức) |
 | UC-012 | Theo dõi đơn đang thuê và quá hạn | Rental Staff |
 | UC-013 | Tiếp nhận hoàn trả và kiểm tra | Rental Staff |
 | UC-014 | Ghi nhận phí phát sinh | Rental Staff |
 | UC-015 | Phê duyệt phí vượt ngưỡng | Store Manager |
-| UC-016 | Quyết toán và hoàn tiền cọc | Rental Staff |
+| UC-016 | Quyết toán và hoàn tiền cọc | Rental Staff, Payment Service (nếu tích hợp) |
 | UC-017 | Xem báo cáo vận hành | Store Manager |
 | UC-018 | Xử lý Customer không đến nhận | Rental Staff |
-| UC-019 | Xử lý cửa hàng không thể cung cấp đơn | Rental Staff |
+| UC-019 | Xử lý cửa hàng không thể cung cấp đơn | Rental Staff, Payment Service (nếu hoàn điện tử) |
+
+## Use Case Relationships
+
+- UC-002 bao gồm UC-003 vì kết quả tìm kiếm theo lịch phụ thuộc kiểm tra availability.
+- UC-005 bao gồm UC-003 vì tạo đơn phải kiểm tra lại availability.
+- UC-015 mở rộng UC-016 khi phí vượt ngưỡng hoặc có sự cố nghiêm trọng/mất đồ; UC-016 vẫn là use case quyết toán cơ sở.
 
 ## Planned Use Case
 

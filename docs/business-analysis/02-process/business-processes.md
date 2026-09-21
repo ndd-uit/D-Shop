@@ -17,6 +17,8 @@ RentalUnit được theo dõi xuyên suốt các trạng thái như:
 - DAMAGED;
 - RETIRED.
 
+Store Manager chỉ retire RentalUnit đang ở `AVAILABLE`, `DAMAGED` hoặc `MAINTENANCE` khi unit không có Reservation hiệu lực.
+
 ## P02 - Tìm kiếm và kiểm tra khả dụng
 
 Customer chọn trang phục, size và thời gian thuê.
@@ -58,7 +60,7 @@ Staff:
 
 Nếu RentalUnit đã phân bổ không đủ điều kiện, Rental Staff thử thay thế bằng RentalUnit khả dụng khác. Nếu cửa hàng vẫn không thể cung cấp đơn, Rental Staff ghi nhận `FULFILLMENT_FAILED`; hệ thống giải phóng Reservation và ghi nhận hoàn toàn bộ tiền thuê đã thanh toán.
 
-## P05 - Bàn giao và theo dõi thời gian thuê
+## P05 - Thu cọc và bàn giao trang phục
 
 Khi Customer đến nhận:
 
@@ -66,11 +68,10 @@ Khi Customer đến nhận:
 2. Staff thu và ghi nhận tiền cọc.
 3. Staff xác nhận bàn giao.
 4. RentalUnit chuyển sang trạng thái RENTED.
-5. Hệ thống theo dõi hạn trả và xác định đơn quá hạn.
 
 Nếu chưa bàn giao trước 18:00 ngày nhận, hệ thống không cho tiếp tục chuẩn bị/bàn giao. Staff có thể ghi nhận `NO_SHOW`; đây không phải Customer Cancellation.
 
-## P06 - Hoàn trả và kiểm tra
+## P06 - Hoàn trả và kiểm tra trang phục
 
 Khi Customer trả trang phục:
 
@@ -78,9 +79,11 @@ Khi Customer trả trang phục:
 - kiểm tra tình trạng RentalUnit;
 - ghi nhận trả trễ hoặc hư hỏng;
 - lưu mô tả và bằng chứng;
-- xác định trạng thái tiếp theo của RentalUnit.
+- phân loại RentalUnit từ `RETURN_INSPECTION` sang `CLEANING`, `MAINTENANCE` hoặc `DAMAGED`.
 
-## P07 - Quyết toán phí và hoàn tiền cọc
+Baseline hiện tại không chuyển trực tiếp RentalUnit từ `RETURN_INSPECTION` sang `AVAILABLE` hoặc `RETIRED`.
+
+## P07 - Quyết toán, phê duyệt phí và hoàn tất đơn
 
 Hệ thống tính các khoản phát sinh như:
 

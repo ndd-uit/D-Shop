@@ -1,47 +1,24 @@
-# P04 - Rental Preparation
+# P04 - Chuẩn bị đơn thuê
 
-P04 mô tả cách Rental Staff chuẩn bị các RentalUnit đã được phân bổ trước thời điểm Customer đến nhận.
+P04 mô tả cách Rental Staff chuẩn bị từng RentalUnit trước thời điểm bàn giao.
+
+![P04 - Chuẩn bị đơn thuê](../assets/diagrams/p04-preparation.svg)
+
+[PlantUML source](../assets/diagrams/p04-preparation.puml)
 
 ## Actors
 
 - Rental Staff
 - D-SHOP
+- Payment Service, chỉ khi có tích hợp hoàn tiền điện tử
 
-## Main Flow
+## Flow Summary
 
-```mermaid
-sequenceDiagram
-    actor Staff as Rental Staff
-    participant System as D-SHOP
-
-    Staff->>System: Xem danh sách đơn cần chuẩn bị
-    System-->>Staff: Hiển thị RentalOrder và RentalUnit được phân bổ
-
-    Staff->>System: Chọn RentalOrder cần xử lý
-    System-->>Staff: Hiển thị chi tiết RentalUnit
-
-    Staff->>System: Xác nhận bắt đầu chuẩn bị
-    System->>System: Cập nhật trạng thái RentalUnit
-
-    Staff->>System: Kiểm tra trang phục và phụ kiện
-    Staff->>System: Ghi nhận tình trạng trước bàn giao
-
-    alt RentalUnit đủ điều kiện bàn giao
-        Staff->>System: Xác nhận đã chuẩn bị xong
-        System->>System: Cập nhật RentalOrder sẵn sàng bàn giao
-        System-->>Staff: Thông báo chuẩn bị thành công
-    else RentalUnit không đủ điều kiện
-        Staff->>System: Yêu cầu thay RentalUnit
-        System->>System: Kiểm tra unit thay thế trong cùng blocked interval
-        alt Có RentalUnit thay thế
-            System->>System: Thay Reservation và cập nhật unit
-            System-->>Staff: Tiếp tục chuẩn bị unit mới
-        else Không thể cung cấp đơn
-            Staff->>System: Ghi nhận FULFILLMENT_FAILED và lý do
-            System->>System: Giải phóng Reservation và ghi nhận refund toàn bộ tiền thuê
-            System-->>Staff: Đóng luồng chuẩn bị
-        end
-    end
-```
-
-Sau 18:00 ngày nhận, hệ thống từ chối bắt đầu/hoàn tất chuẩn bị cho đơn chưa bàn giao.
+1. Staff mở danh sách order `CONFIRMED` và chọn bắt đầu chuẩn bị.
+2. D-SHOP từ chối nếu order sai trạng thái hoặc đã qua 18:00 ngày nhận; nếu hợp lệ, order chuyển `PREPARING`.
+3. Với mỗi Reservation `CONFIRMED`, Staff ghi tình trạng, phụ kiện, ghi chú và bằng chứng chuẩn bị.
+4. Unit đạt yêu cầu chuyển `AVAILABLE -> PREPARING` và được ghi `preparedAt`.
+5. Nếu unit không thể bàn giao, Staff yêu cầu unit thay thế cùng Garment/size và khả dụng trong blocked interval cũ.
+6. Có unit thay thế: Reservation cũ chuyển `RELEASED`, Reservation mới được tạo ở `CONFIRMED`; order `READY_FOR_PICKUP` quay về `PREPARING` nếu cần chuẩn bị lại.
+7. Không có unit thay thế: Staff ghi nhận `FULFILLMENT_FAILED`; hệ thống release Reservation, trả unit đang `PREPARING` về `AVAILABLE`, đóng order và tạo `RENTAL_REFUND` bằng toàn bộ rentalAmount.
+8. Chỉ khi toàn bộ item đã chuẩn bị, order mới chuyển `READY_FOR_PICKUP`; nếu chưa đủ thì giữ `PREPARING`.

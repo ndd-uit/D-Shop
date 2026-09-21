@@ -2,6 +2,10 @@
 
 Domain Model mô tả các đối tượng nghiệp vụ chính và mối quan hệ giữa chúng trong D-SHOP.
 
+![D-SHOP Domain Model](../assets/diagrams/domain-model.svg)
+
+[PlantUML source](../assets/diagrams/domain-model.puml)
+
 ## Core Entities
 
 | Entity | Mô tả |
@@ -24,35 +28,28 @@ Domain Model mô tả các đối tượng nghiệp vụ chính và mối quan h
 | RentalOrderStatusHistory | Lịch sử thay đổi trạng thái RentalOrder |
 | RentalUnitStatusHistory | Lịch sử thay đổi trạng thái RentalUnit |
 
-## Main Relationships
+## Cardinality Summary
 
-```mermaid
-classDiagram
-    User "1" --> "0..1" RentalCart
-    User "1" --> "*" RentalOrder
-    RentalPolicy "1" --> "*" RentalOrder
+| Quan hệ | Cardinality |
+| --- | --- |
+| User - RentalCart | Một User có tối đa một RentalCart; mỗi RentalCart thuộc một User |
+| User - RentalOrder | Một User có thể có nhiều RentalOrder; mỗi RentalOrder thuộc một User |
+| RentalPolicy - RentalOrder | Một RentalPolicy áp dụng cho nhiều RentalOrder; mỗi RentalOrder chụp đúng một policy |
+| Category - Garment | Một Category có nhiều Garment; mỗi Garment thuộc một Category |
+| Garment - RentalUnit | Một Garment có nhiều RentalUnit; mỗi RentalUnit thuộc một Garment |
+| RentalCart - RentalCartItem | Một RentalCart có nhiều RentalCartItem; mỗi item thuộc một cart |
+| Garment - RentalCartItem | Một Garment có thể xuất hiện trong nhiều cart item; mỗi cart item tham chiếu một Garment |
+| RentalOrder - RentalOrderItem | Một RentalOrder có từ một RentalOrderItem trở lên; mỗi item thuộc một order |
+| Garment - RentalOrderItem | Một Garment có thể xuất hiện trong nhiều order item; mỗi order item tham chiếu một Garment |
+| RentalOrderItem - Reservation | Một item có thể có nhiều Reservation lịch sử; mỗi Reservation thuộc một item |
+| RentalUnit - Reservation | Một unit có thể xuất hiện trong nhiều Reservation theo thời gian; mỗi Reservation phân bổ một unit |
+| RentalOrder - Payment / Refund / FeeApprovalRequest / StatusHistory | Một order có thể có nhiều bản ghi thuộc từng loại |
+| Payment - Refund | Một Refund có thể không tham chiếu Payment; nếu có thì tham chiếu tối đa một Payment. Một Payment có thể là nguồn của nhiều Refund |
+| RentalOrderItem - InspectionResult | Mỗi item có tối đa một InspectionResult |
+| RentalUnit - InspectionResult / StatusHistory / AvailabilityBlock | Một unit có thể có nhiều bản ghi thuộc từng loại |
 
-    Category "1" --> "*" Garment
-    Garment "1" --> "*" RentalUnit
+## Allocation Invariant
 
-    RentalUnit "1" --> "*" AvailabilityBlock
-    RentalUnit "1" --> "*" Reservation
-    RentalUnit "1" --> "*" InspectionResult
+`RentalOrderItem` không trỏ trực tiếp tới `RentalUnit`; việc phân bổ vật lý đi qua `Reservation`.
 
-    RentalCart "1" --> "*" RentalCartItem
-    Garment "1" --> "*" RentalCartItem
-
-    RentalOrder "1" --> "*" RentalOrderItem
-    RentalOrder "1" --> "*" Payment
-    RentalOrder "1" --> "*" Refund
-    RentalOrder "1" --> "*" RentalOrderStatusHistory
-    RentalOrder "1" --> "*" FeeApprovalRequest
-
-    RentalOrderItem "*" --> "1" Garment
-    RentalOrderItem "1" --> "*" Reservation
-    RentalOrderItem "1" --> "0..1" InspectionResult
-
-    RentalUnit "1" --> "*" RentalUnitStatusHistory
-```
-
-`RentalOrderItem` không trỏ trực tiếp tới `RentalUnit`; việc phân bổ RentalUnit được biểu diễn qua `Reservation`. `FeeApprovalRequest` thuộc `RentalOrder`, còn bằng chứng/InspectionResult được dùng làm dữ liệu xem xét nghiệp vụ.
+Tại một thời điểm, mỗi `RentalOrderItem` chỉ được có tối đa một Reservation hiệu lực. Các Reservation cũ vẫn được giữ lại để bảo toàn lịch sử khi thay RentalUnit.

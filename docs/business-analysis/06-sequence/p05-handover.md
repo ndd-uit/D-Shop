@@ -1,46 +1,23 @@
-# P05 - Handover
+# P05 - Thu cọc và bàn giao trang phục
 
-P05 mô tả cách Rental Staff xác nhận tiền cọc và bàn giao RentalUnit cho Customer.
+P05 mô tả cách Rental Staff đối chiếu Customer, thu đủ tiền cọc và bàn giao toàn bộ RentalUnit.
+
+![P05 - Thu cọc và bàn giao trang phục](../assets/diagrams/p05-handover.svg)
+
+[PlantUML source](../assets/diagrams/p05-handover.puml)
 
 ## Actors
 
-- Rental Staff
 - Customer
+- Rental Staff
 - D-SHOP
+- Payment Service, khi tiền cọc được thu điện tử
 
-## Main Flow
+## Flow Summary
 
-```mermaid
-sequenceDiagram
-    actor Staff as Rental Staff
-    actor Customer
-    participant System as D-SHOP
-
-    Customer->>Staff: Đến nhận trang phục
-    Staff->>System: Tra cứu RentalOrder
-    System-->>Staff: Hiển thị thông tin đơn và RentalUnit
-
-    Staff->>System: Kiểm tra trạng thái đơn và cutoff 18:00
-    Staff->>Customer: Xác nhận thông tin nhận thuê
-
-    alt Đã quá cutoff và chưa bàn giao
-        System-->>Staff: Từ chối thu cọc/bàn giao
-        Staff->>System: Ghi nhận NO_SHOW
-        System->>System: Kiểm tra chưa pickup/chưa thu cọc
-        System->>System: Giải phóng Reservation
-    else Còn trong thời gian bàn giao
-        Staff->>System: Ghi nhận tiền cọc
-        System->>System: Kiểm tra số tiền cọc
-
-        alt Tiền cọc đã được ghi nhận đầy đủ
-            Staff->>System: Xác nhận bàn giao RentalUnit
-            System->>System: Ghi nhận actualPickupAt
-            System->>System: RentalUnit = RENTED; RentalOrder = RENTING
-            System-->>Staff: Xác nhận bàn giao thành công
-            Staff-->>Customer: Bàn giao trang phục
-        else Tiền cọc chưa đầy đủ
-            System-->>Staff: Không cho phép xác nhận bàn giao
-            Staff-->>Customer: Yêu cầu hoàn tất tiền cọc
-        end
-    end
-```
+1. Staff tra cứu RentalOrder đến ngày nhận; D-SHOP hiển thị trạng thái, Customer, RentalUnit và tiền cọc yêu cầu.
+2. Nếu đã qua 18:00 ngày nhận và chưa pickup/chưa thu cọc, Staff ghi nhận `NO_SHOW`; hệ thống xác minh điều kiện, release Reservation, trả unit `PREPARING` về `AVAILABLE` và đóng order. Tiền thuê không được hoàn.
+3. Nếu Customer đến trong pickup window, Staff đối chiếu Customer và CCCD.
+4. Tiền cọc có thể được Staff ghi nhận trực tiếp hoặc xác minh qua Payment Service.
+5. Khi chưa thu đủ cọc hoặc giao dịch chưa được xác minh, hệ thống không cho phép bàn giao.
+6. Khi đủ điều kiện, Staff xác nhận bàn giao toàn bộ item; hệ thống ghi `actualPickupAt`, chuyển Reservation `CONFIRMED -> ACTIVE`, RentalUnit `PREPARING -> RENTED` và RentalOrder sang `RENTING`.

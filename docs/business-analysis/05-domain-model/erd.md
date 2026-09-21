@@ -1,42 +1,20 @@
 # Entity Relationship Diagram
 
-ERD mô tả các thực thể dữ liệu chính và quan hệ giữa chúng trong D-SHOP.
+ERD mô tả các thực thể dữ liệu và quan hệ đang được D-SHOP sử dụng.
 
-> Đây là ERD ở mức nghiệp vụ.
-> Tên bảng, field, datatype, index và constraint kỹ thuật sẽ được đối chiếu với database schema khi thiết kế chi tiết.
+![D-SHOP Entity Relationship Diagram](../assets/diagrams/erd.svg)
 
-## ERD
+[PlantUML source](../assets/diagrams/erd.puml)
 
-```mermaid
-erDiagram
+## Cardinality Notes
 
-    USER ||--o| RENTAL_CART : owns
-    USER ||--o{ RENTAL_ORDER : places
-    RENTAL_POLICY ||--o{ RENTAL_ORDER : applies_to
+- `rental_orders.policy_id` là bắt buộc: mỗi RentalOrder dùng đúng một RentalPolicy, một policy có thể áp dụng cho nhiều order.
+- `rental_orders` có ít nhất một `rental_order_items`; các quan hệ collection còn lại có thể rỗng.
+- `rental_order_items` và `rental_units` liên kết qua `reservations`, không có FK trực tiếp từ order item sang unit.
+- Mỗi `rental_order_item` có tối đa một `inspection_result`, trong khi một `rental_unit` có thể có nhiều inspection theo thời gian.
+- `refunds.payment_id` là nullable: Refund có thể không gắn Payment, hoặc gắn tối đa một Payment; một Payment có thể được tham chiếu bởi nhiều Refund.
+- Các FK audit/decision `rental_policies.created_by`, `reservations.replaced_by`, `fee_approval_requests.decided_by`, hai trường `changed_by` của status history và `rental_orders.additional_payment_confirmed_by` đều nullable.
 
-    CATEGORY ||--o{ GARMENT : contains
-    GARMENT ||--o{ RENTAL_UNIT : has
+## Reservation Invariant
 
-    RENTAL_CART ||--o{ RENTAL_CART_ITEM : contains
-    GARMENT ||--o{ RENTAL_CART_ITEM : selected_as
-
-    RENTAL_ORDER ||--|{ RENTAL_ORDER_ITEM : contains
-    GARMENT ||--o{ RENTAL_ORDER_ITEM : references
-    RENTAL_ORDER_ITEM ||--o{ RESERVATION : reserves
-    RENTAL_UNIT ||--o{ RESERVATION : blocked_by
-
-    RENTAL_UNIT ||--o{ AVAILABILITY_BLOCK : unavailable_during
-
-    RENTAL_ORDER ||--o{ PAYMENT : has
-    RENTAL_ORDER ||--o{ REFUND : has
-
-    RENTAL_ORDER_ITEM ||--o| INSPECTION_RESULT : inspected_by
-    RENTAL_UNIT ||--o{ INSPECTION_RESULT : inspection_of
-
-    RENTAL_ORDER ||--o{ FEE_APPROVAL_REQUEST : may_require
-
-    RENTAL_ORDER ||--o{ RENTAL_ORDER_STATUS_HISTORY : tracks
-    RENTAL_UNIT ||--o{ RENTAL_UNIT_STATUS_HISTORY : tracks
-```
-
-Phân bổ vật lý đi qua `RESERVATION` (`RENTAL_ORDER_ITEM -> RESERVATION -> RENTAL_UNIT`), không có quan hệ trực tiếp từ `RENTAL_ORDER_ITEM` sang `RENTAL_UNIT` trong schema hiện tại.
+Một RentalOrderItem có thể có nhiều Reservation lịch sử khi RentalUnit được thay thế, nhưng tại một thời điểm chỉ được có tối đa một Reservation hiệu lực.

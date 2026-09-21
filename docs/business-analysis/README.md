@@ -31,11 +31,11 @@ Mục tiêu chính:
 
 - P01 - Quản lý vòng đời trang phục
 - P02 - Tìm kiếm và kiểm tra khả dụng
-- P03 - Giỏ thuê, đặt thuê, giữ chỗ và thanh toán
+- P03 - Đặt thuê, giữ chỗ và thanh toán
 - P04 - Chuẩn bị đơn thuê
-- P05 - Bàn giao và theo dõi thời gian thuê
-- P06 - Hoàn trả và kiểm tra
-- P07 - Quyết toán phí và hoàn tiền cọc
+- P05 - Thu cọc và bàn giao trang phục
+- P06 - Hoàn trả và kiểm tra trang phục
+- P07 - Quyết toán, phê duyệt phí và hoàn tất đơn
 
 Customer Cancellation hiện không thuộc scope.
 
@@ -70,6 +70,25 @@ Customer Cancellation hiện không thuộc scope.
 - [State Models](05-domain-model/state-models.md)
 - [ERD](05-domain-model/erd.md)
 - [Sequence Diagrams](06-sequence/)
+
+### Diagram Sources
+
+Các trang Markdown nhúng SVG được sinh từ đúng source PlantUML dưới đây. Khi thay đổi nghiệp vụ, cập nhật file `.puml` trước rồi sinh lại SVG để tránh hai phiên bản sơ đồ bị lệch nhau.
+
+- [Use Case Overview](assets/diagrams/use-case-overview.puml)
+- [TO-BE Activity](assets/diagrams/to-be-activity.puml)
+- [RentalOrder State](assets/diagrams/rental-order-state.puml)
+- [Reservation State](assets/diagrams/reservation-state.puml)
+- [RentalUnit State](assets/diagrams/rental-unit-state.puml)
+- [Domain Model](assets/diagrams/domain-model.puml)
+- [ERD](assets/diagrams/erd.puml)
+- [P01 - Garment Lifecycle](assets/diagrams/p01-garment-lifecycle.puml)
+- [P02 - Availability](assets/diagrams/p02-availability.puml)
+- [P03 - Booking & Payment](assets/diagrams/p03-booking-payment.puml)
+- [P04 - Preparation](assets/diagrams/p04-preparation.puml)
+- [P05 - Handover](assets/diagrams/p05-handover.puml)
+- [P06 - Return & Inspection](assets/diagrams/p06-return-inspection.puml)
+- [P07 - Settlement](assets/diagrams/p07-settlement.puml)
 
 ### Traceability & Decisions
 

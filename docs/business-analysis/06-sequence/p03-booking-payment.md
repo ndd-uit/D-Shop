@@ -1,6 +1,10 @@
-# P03 - Booking & Payment
+# P03 - Đặt thuê, giữ chỗ và thanh toán
 
-P03 mô tả cách Customer chọn một hoặc nhiều item trong RentalCart để checkout, D-SHOP giữ tạm toàn bộ RentalUnit tương ứng và xác nhận đơn sau khi thanh toán tiền thuê thành công.
+P03 mô tả checkout nhóm item được chọn, giữ chỗ tạm thời và xác nhận đơn bằng thanh toán tiền thuê.
+
+![P03 - Đặt thuê, giữ chỗ và thanh toán](../assets/diagrams/p03-booking-payment.svg)
+
+[PlantUML source](../assets/diagrams/p03-booking-payment.puml)
 
 ## Actors
 
@@ -8,44 +12,15 @@ P03 mô tả cách Customer chọn một hoặc nhiều item trong RentalCart đ
 - D-SHOP
 - Payment Service
 
-## Main Flow
+## Flow Summary
 
-```mermaid
-sequenceDiagram
-    actor Customer
-    participant System as D-SHOP
-    participant Payment as Payment Service
+1. Customer chọn một hoặc nhiều RentalCartItem và xác nhận thông tin nhận/trả.
+2. D-SHOP kiểm tra input, yêu cầu các item dùng cùng khoảng thuê và kiểm tra lại availability toàn bộ nhóm.
+3. Nếu có item không còn khả dụng, hệ thống rollback toàn bộ checkout và không tạo đơn một phần.
+4. Nếu giữ được toàn bộ item, hệ thống phân bổ RentalUnit, tính tiền thuê theo số ngày, snapshot tiền cọc, tạo RentalOrder `PENDING_PAYMENT` và Reservation `TEMPORARY_HOLD`.
+5. `holdExpiresAt = now + policy.holdDuration`; chỉ item đã checkout bị xóa khỏi giỏ.
+6. Khi Customer yêu cầu thanh toán, D-SHOP kiểm tra lại order và toàn bộ hold trước khi tạo Payment `RENTAL/PENDING`.
+7. Callback/IPN phải được xác minh chữ ký, số tiền, reference và idempotency.
+8. Thanh toán thành công khi hold còn hiệu lực chuyển Payment sang `SUCCEEDED`, order sang `CONFIRMED` và Reservation sang `CONFIRMED`.
 
-    Customer->>System: Chọn RentalCartItem và xác nhận checkout
-    System->>System: Kiểm tra cùng khoảng thuê
-    System->>System: Kiểm tra availability toàn bộ item được chọn
-
-    alt Tất cả item được chọn còn khả dụng
-        System->>System: Phân bổ RentalUnit
-        System->>System: Tạo RentalOrder và Temporary Hold
-        Note over System: holdExpiresAt = now + policy.holdDuration<br/>Item không chọn vẫn ở giỏ
-        System-->>Customer: Hiển thị tiền thuê và thời hạn giữ chỗ
-
-        Customer->>System: Yêu cầu thanh toán tiền thuê
-        System->>Payment: Tạo yêu cầu thanh toán
-        Payment-->>Customer: Hiển thị thông tin thanh toán
-        Customer->>Payment: Thực hiện thanh toán
-        Payment-->>System: Trả callback/IPN
-        System->>System: Xác minh và ghi nhận kết quả
-
-        alt Thanh toán thành công và hold còn hiệu lực
-            System->>System: Xác nhận Payment, Reservation và RentalOrder
-            System-->>Customer: Đặt thuê thành công
-        else Thanh toán thất bại
-            System->>System: Ghi nhận giao dịch thất bại
-            System-->>Customer: Thanh toán thất bại
-        else Temporary Hold đã hết hạn
-            System->>System: Expire/giải phóng Reservation
-            System-->>Customer: Giữ chỗ đã hết hạn
-        end
-
-    else Có ít nhất một item được chọn không còn khả dụng
-        System-->>Customer: Từ chối toàn bộ nhóm item được chọn
-        Note over System: Không tạo RentalOrder một phần
-    end
-```
+Nếu callback thành công sau khi hold đã hết hạn, hệ thống không hồi sinh order `EXPIRED`; giao dịch được chuyển sang đối soát/refund.

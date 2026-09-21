@@ -1,65 +1,35 @@
-# P07 - Settlement
+# P07 - Quyết toán, phê duyệt phí và hoàn tất đơn
 
-P07 mô tả cách D-SHOP tổng hợp các khoản phí sau hoàn trả, xử lý phê duyệt nếu cần, tính số tiền hoàn cọc hoặc cần thu thêm và hoàn tất RentalOrder.
+P07 mô tả tổng hợp phí, phê duyệt, hoàn cọc hoặc thu thêm và hoàn tất RentalOrder.
+
+![P07 - Quyết toán, phê duyệt phí và hoàn tất đơn](../assets/diagrams/p07-settlement.svg)
+
+[PlantUML source](../assets/diagrams/p07-settlement.puml)
 
 ## Actors
 
+- Customer
 - Rental Staff
 - Store Manager
-- Customer
 - D-SHOP
+- Payment Service, trong phạm vi thanh toán/hoàn tiền điện tử được tích hợp
 
-## Main Flow
+## Flow Summary
 
-```mermaid
-sequenceDiagram
-    actor Staff as Rental Staff
-    actor Manager as Store Manager
-    actor Customer
-    participant System as D-SHOP
+1. Staff mở RentalOrder `SETTLEMENT_PENDING`.
+2. D-SHOP tổng proposedCharge từ InspectionResult, tính lateFee theo policy snapshot, rồi tính `additionalCharge`, `depositRefundAmount`, `additionalPayment` và `finalCharge`.
+3. Phí vượt `approvalThreshold` hoặc có `SEVERE_DAMAGE/LOST` tạo FeeApprovalRequest `PENDING`; Store Manager có thể `APPROVE`, `ADJUST` hoặc `REJECT`, sau đó hệ thống tính lại quyết toán.
+4. Phí trong quyền Staff được xác nhận và ghi FeeApprovalRequest `APPROVED`.
+5. Nếu cần hoàn cọc, hệ thống tạo/cập nhật Refund `DEPOSIT_RETURN`; kết quả chuyển tiền điện tử hoặc hoàn trực tiếp phải được ghi nhận.
+6. Nếu cần thu thêm, Staff thông báo Customer, xác nhận số tiền đã nhận và hệ thống ghi người/thời điểm xác nhận.
+7. RentalOrder chỉ chuyển `COMPLETED` khi toàn bộ nghĩa vụ hoàn/thu thêm đã hoàn tất; nếu chưa thì giữ `SETTLEMENT_PENDING`.
 
-    Staff->>System: Mở RentalOrder cần quyết toán
-    System->>System: Tổng hợp tiền cọc đã thu
-    System->>System: Tổng hợp phí trả trễ
-    System->>System: Tổng hợp phí hư hỏng hoặc mất phụ kiện
-    System->>System: Tính tổng phí phát sinh
+## Late Fee Boundary
 
-    alt Tổng phí vượt ngưỡng phê duyệt
-        System-->>Manager: Gửi yêu cầu phê duyệt
-        Manager->>System: Xem InspectionResult và bằng chứng
-        Manager->>System: Phê duyệt hoặc từ chối khoản phí
-
-        alt Khoản phí được phê duyệt
-            System->>System: Xác nhận phí hợp lệ
-        else Khoản phí bị từ chối
-            System->>System: Loại bỏ hoặc điều chỉnh khoản phí
-        end
-    end
-
-    System->>System: Tính số tiền quyết toán
-
-    alt Tiền cọc lớn hơn tổng phí
-        System->>System: Tính số tiền cần hoàn
-        System->>System: Tạo/cập nhật Refund
-        Staff->>System: Ghi nhận kết quả hoàn tiền thực tế
-        System-->>Customer: Cập nhật trạng thái khoản hoàn
-    else Tiền cọc bằng tổng phí
-        System->>System: Không phát sinh hoàn hoặc thu thêm
-    else Tổng phí lớn hơn tiền cọc
-        System->>System: Tính số tiền cần thu thêm
-        System-->>Customer: Thông báo khoản cần thanh toán
-        Customer->>Staff: Thanh toán khoản bổ sung
-        Staff->>System: Ghi nhận khoản đã thu
-    end
-
-    Staff->>System: Xác nhận hoàn tất quyết toán
-    System->>System: Cập nhật RentalOrder hoàn tất
-    Note over System: Reservation ACTIVE vẫn giữ lịch đến blockedEndAt
-    System-->>Staff: Xác nhận settlement thành công
-```
+- Trả từ 08:00 đến đúng 12:00 của ngày trễ thứ `d`: `(d - 0.5) x dailyRentalAmount`.
+- Trả sau 12:00 đến 18:00: `d x dailyRentalAmount`.
 
 ## Integration Boundary
 
-- Payment Service xử lý/xác nhận khoản thanh toán điện tử được tích hợp.
-- Refund là bản ghi nghiệp vụ theo dõi số tiền và trạng thái. Baseline hiện tại không giả định có API refund tự động từ Payment Service.
-- Job vòng đời Reservation chỉ chuyển Reservation đủ điều kiện sang `COMPLETED` sau khi RentalUnit đã trả và `now >= blockedEndAt`.
+- Refund là bản ghi nghĩa vụ và trạng thái; baseline không mặc định Payment Service có API refund tự động.
+- RentalOrder `COMPLETED` không kết thúc Reservation ngay. Reservation `ACTIVE` chỉ chuyển `COMPLETED` sau khi unit đã trả và `currentTime >= blockedEndAt`.

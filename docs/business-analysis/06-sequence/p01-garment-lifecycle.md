@@ -1,34 +1,22 @@
-# P01 - Garment Lifecycle
+# P01 - Quản lý vòng đời trang phục
 
-P01 mô tả cách Store Manager quản lý danh mục trang phục, mẫu trang phục và các RentalUnit vật lý trong D-SHOP.
+P01 mô tả cách Store Manager quản lý Category, Garment và từng RentalUnit vật lý.
+
+![P01 - Quản lý vòng đời trang phục](../assets/diagrams/p01-garment-lifecycle.svg)
+
+[PlantUML source](../assets/diagrams/p01-garment-lifecycle.puml)
 
 ## Actors
 
 - Store Manager
 - D-SHOP
 
-## Main Flow
+## Flow Summary
 
-```mermaid
-sequenceDiagram
-    actor Manager as Store Manager
-    participant System as D-SHOP
+1. Store Manager tạo hoặc cập nhật Category; D-SHOP kiểm tra dữ liệu và quyền quản trị.
+2. Store Manager tạo hoặc cập nhật Garment; Category phải tồn tại và đang hoạt động.
+3. Khi tạo RentalUnit, hệ thống kiểm tra Garment, metadata và tính duy nhất của `assetCode`; unit mới ở `AVAILABLE` và có RentalUnitStatusHistory.
+4. Khi cập nhật RentalUnit, hệ thống tiếp tục kiểm tra dữ liệu và `assetCode`.
+5. Store Manager chỉ được retire unit ở `AVAILABLE`, `DAMAGED` hoặc `MAINTENANCE` khi không có Reservation hiệu lực; hệ thống ghi lịch sử trạng thái.
 
-    Manager->>System: Tạo hoặc cập nhật Category
-    System->>System: Kiểm tra dữ liệu
-    System-->>Manager: Lưu Category thành công
-
-    Manager->>System: Tạo hoặc cập nhật Garment
-    System->>System: Kiểm tra thông tin Garment
-    System-->>Manager: Lưu Garment thành công
-
-    Manager->>System: Thêm RentalUnit cho Garment
-    System->>System: Kiểm tra assetCode
-
-    alt assetCode hợp lệ và chưa tồn tại
-        System->>System: Tạo RentalUnit
-        System-->>Manager: RentalUnit được tạo thành công
-    else assetCode trùng hoặc dữ liệu không hợp lệ
-        System-->>Manager: Từ chối và hiển thị lỗi
-    end
-```
+Các trường hợp dữ liệu không hợp lệ, Category/Garment không hợp lệ, `assetCode` trùng hoặc unit không đủ điều kiện retire đều bị từ chối.

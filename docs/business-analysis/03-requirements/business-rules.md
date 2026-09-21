@@ -60,7 +60,7 @@ Ngày 08/09 có thể được thuê nếu không có xung đột khác.
 | --- | --- |
 | BRL-020 | Mỗi RentalUnit hoàn trả phải được kiểm tra và ghi nhận kết quả kiểm tra. |
 | BRL-021 | Rental Staff có thể ghi nhận trả trễ, hư hỏng, mất phụ kiện và bằng chứng liên quan. |
-| BRL-022 | RentalUnit sau hoàn trả có thể chuyển sang AVAILABLE, CLEANING, MAINTENANCE, DAMAGED hoặc RETIRED tùy kết quả kiểm tra. |
+| BRL-022 | Sau hoàn trả, RentalUnit ở `RETURN_INSPECTION` phải được phân loại sang `CLEANING`, `MAINTENANCE` hoặc `DAMAGED`. Baseline hiện tại không cho chuyển trực tiếp từ `RETURN_INSPECTION` sang `AVAILABLE` hoặc `RETIRED`; unit chỉ trở lại `AVAILABLE` sau khi hoàn tất vệ sinh/bảo trì, hoặc được Store Manager retire từ trạng thái được phép. |
 
 ## Fee & Settlement
 

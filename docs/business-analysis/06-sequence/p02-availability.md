@@ -1,31 +1,29 @@
-# P02 - Availability Check
+# P02 - Tìm kiếm và kiểm tra khả dụng
 
-P02 mô tả cách Customer kiểm tra khả dụng của Garment theo khoảng thời gian thuê và cách D-SHOP xác định RentalUnit có thể được phân bổ.
+P02 mô tả cách Customer kiểm tra khả dụng theo Garment, size, số lượng và khoảng thời gian thuê.
+
+![P02 - Tìm kiếm và kiểm tra khả dụng](../assets/diagrams/p02-availability.svg)
+
+[PlantUML source](../assets/diagrams/p02-availability.puml)
 
 ## Actors
 
 - Customer
 - D-SHOP
 
-## Main Flow
+## Flow Summary
 
-```mermaid
-sequenceDiagram
-    actor Customer
-    participant System as D-SHOP
+1. D-SHOP kiểm tra dữ liệu đầu vào và chuẩn hóa ngày nhận về 08:00, ngày trả về 18:00.
+2. Hệ thống lấy RentalPolicy hiệu lực; nếu không có policy thì không thể kiểm tra availability.
+3. Hệ thống tính `blockedStartAt = rentalStartAt - 1 ngày` và `blockedEndAt = returnDueAt + 1 ngày`.
+4. Khoảng thời gian dùng quy ước nửa mở `[startAt, endAt)`.
+5. Hệ thống lọc RentalUnit theo Garment, size và trạng thái.
+6. Hệ thống loại Reservation hiệu lực bị overlap và AvailabilityBlock bị overlap.
+7. Hệ thống chỉ trả kết quả khả dụng khi số RentalUnit còn lại đáp ứng quantity.
 
-    Customer->>System: Chọn Garment và ngày nhận/ngày trả
-    System->>System: Kiểm tra khoảng thuê hợp lệ
-    System->>System: Chuẩn hóa thời gian nhận 08:00 và trả 18:00
-    System->>System: Tính requested blocked interval có buffer
-    System->>System: Kiểm tra trạng thái RentalUnit
-    System->>System: Kiểm tra Reservation hiệu lực bị overlap
-    Note over System: existing.start < requested.end<br/>AND existing.end > requested.start
-    System->>System: Kiểm tra AvailabilityBlock bị overlap
+Reservation chặn lịch gồm `TEMPORARY_HOLD` còn hạn, `CONFIRMED` và `ACTIVE`. Hai khoảng overlap khi:
 
-    alt Có ít nhất một RentalUnit khả dụng
-        System-->>Customer: Hiển thị Garment/RentalUnit khả dụng
-    else Không có RentalUnit khả dụng
-        System-->>Customer: Thông báo không khả dụng
-    end
+```text
+existing.start < requested.end
+AND existing.end > requested.start
 ```
