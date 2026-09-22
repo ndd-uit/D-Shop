@@ -72,7 +72,7 @@ const buildChatHistory = (messages, limit = 10) =>
         .slice(-limit)
         .map((message) => ({
             role: message.role === 'assistant' ? 'model' : 'user',
-            parts: [{ text: message.text }],
+            content: message.text,
         }))
 
 export {

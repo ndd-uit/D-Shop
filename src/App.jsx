@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { Toaster } from "sonner"
 import DocumentTitle from "./components/common/DocumentTitle"
 import RoleRoute from "./components/auth/RoleRoute"
+import ManagerRentalUnitsPage from "./pages/ManagerRentalUnitsPage"
 
 const CustomerLayout = lazy(() => import("./pages/CustomerLayout"))
 const HomePage = lazy(() => import("./pages/HomePage"))
@@ -19,7 +20,6 @@ const LoginPage = lazy(() => import("./pages/LoginPage"))
 const ManagerDashboardPage = lazy(() => import("./pages/ManagerDashboardPage"))
 const ManagerGarmentsPage = lazy(() => import("./pages/ManagerGarmentsPage"))
 const ManagerCategoriesPage = lazy(() => import("./pages/ManagerCategoriesPage"))
-const ManagerRentalUnitsPage = lazy(() => import("./pages/ManagerRentalUnitsPage"))
 const ManagerStaffPage = lazy(() => import("./pages/ManagerStaffPage"))
 const ManagerFeeApprovalsPage = lazy(() => import("./pages/ManagerFeeApprovalsPage"))
 const ManagerPoliciesPage = lazy(() => import("./pages/ManagerPoliciesPage"))

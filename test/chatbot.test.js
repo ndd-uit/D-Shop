@@ -75,8 +75,8 @@ test('chatbot renders assistant response state and maps history for backend', ()
     })
 
     assert.deepEqual(buildChatHistory(state.messages), [
-        { role: 'user', parts: [{ text: 'Còn size M không?' }] },
-        { role: 'model', parts: [{ text: 'Size M hiện còn trống.' }] },
+        { role: 'user', content: 'Còn size M không?' },
+        { role: 'model', content: 'Size M hiện còn trống.' },
     ])
 })
 

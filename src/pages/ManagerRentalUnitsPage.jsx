@@ -4,7 +4,6 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom"
 
 import CustomSelect from "../components/common/CustomSelect.jsx"
 import ManagerHeader from "../components/manager/ManagerHeader.jsx"
-import ManagerPageSkeleton from "../components/manager/ManagerPageSkeleton.jsx"
 import ManagerSidebar from "../components/manager/ManagerSidebar.jsx"
 import RentalUnitDetailDrawer from "../components/manager/RentalUnitDetailDrawer.jsx"
 import RentalUnitFormModal from "../components/manager/RentalUnitFormModal.jsx"
@@ -206,7 +205,6 @@ function ManagerRentalUnitsPage() {
     const logout = () => { clearAuthToken(); navigate("/login", { replace: true }) }
 
     if (forbidden) return <Navigate to="/" replace />
-    if (loading) return <ManagerPageSkeleton />
 
     const formatDate = (value) => {
         if (!value) return "-"
@@ -220,7 +218,7 @@ function ManagerRentalUnitsPage() {
             <ManagerSidebar role={profile?.role} />
             <main className="min-w-0 flex-1">
                 <ManagerHeader
-                    profile={profile} loading={refreshing}
+                    profile={profile} loading={loading || refreshing}
                     title="Kho cho thuê"
                     subtitle="Quản lý từng RentalUnit vật lý của các mẫu trang phục"
                     onReload={refreshUnits} onLogout={logout}
