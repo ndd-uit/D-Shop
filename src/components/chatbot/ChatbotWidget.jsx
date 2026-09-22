@@ -9,6 +9,7 @@ import {
     chatbotReducer,
     createInitialChatState,
 } from './chatbotState.js'
+import SafeChatMarkdown from './SafeChatMarkdown.jsx'
 
 const createMessage = (role, text, extra = {}) => ({
     id: `${role}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -171,9 +172,13 @@ function ChatbotWidget() {
                                 <div className={message.role === 'user'
                                     ? 'max-w-[85%] rounded-2xl rounded-br-md bg-[#a9544d] px-3.5 py-2.5 text-sm leading-6 text-white'
                                     : 'max-w-[88%] rounded-2xl rounded-bl-md border border-[#eee4dc] bg-white px-3.5 py-2.5 text-sm leading-6 text-brand-text shadow-[0_5px_16px_rgba(91,63,54,0.06)]'}>
-                                    <p className={'whitespace-pre-wrap break-words'}>
-                                        {message.text}
-                                    </p>
+                                    {message.role === 'assistant' ? (
+                                        <SafeChatMarkdown content={message.text} />
+                                    ) : (
+                                        <p className={'whitespace-pre-wrap break-words'}>
+                                            {message.text}
+                                        </p>
+                                    )}
                                     {message.role === 'assistant' && message.sources?.length > 0 && (
                                         <p className={'mt-2 border-t border-[#eee7e1] pt-2 text-[11px] leading-4 text-gray-500'}>
                                             Nguồn: {message.sources

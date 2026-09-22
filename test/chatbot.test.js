@@ -8,6 +8,7 @@ import {
     chatbotReducer,
     createInitialChatState,
 } from '../src/components/chatbot/chatbotState.js'
+import { isSafeChatUrl } from '../src/components/chatbot/chatMarkdown.js'
 import {
     getChatbotErrorState,
     sendChatMessage,
@@ -78,6 +79,16 @@ test('chatbot renders assistant response state and maps history for backend', ()
         { role: 'user', content: 'Còn size M không?' },
         { role: 'model', content: 'Size M hiện còn trống.' },
     ])
+})
+
+test('chat markdown accepts only absolute HTTP links', () => {
+    assert.equal(isSafeChatUrl('https://d-shop.example/products/1'), true)
+    assert.equal(isSafeChatUrl('http://localhost:5173/products/1'), true)
+    assert.equal(isSafeChatUrl('javascript:alert(1)'), false)
+    assert.equal(isSafeChatUrl('data:text/html,<script>alert(1)</script>'), false)
+    assert.equal(isSafeChatUrl('/products/1'), false)
+    assert.equal(isSafeChatUrl(''), false)
+    assert.equal(isSafeChatUrl(null), false)
 })
 
 test('chatbot keeps a friendly retryable error without backend internals', () => {
